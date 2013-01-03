@@ -1,7 +1,10 @@
 language: c
 
-script:
+before_script:
 	- "make"
+
+script:
+	- "CFLAGS='-O2 -DDEBUG' make test"
 
 compiler:
 	- clang
