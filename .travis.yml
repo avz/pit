@@ -1,11 +1,11 @@
 language: c
 
 script:
-	- "make"
+  - "make"
 
 compiler:
-	- clang
-	- gcc
+  - clang
+  - gcc
 	
 notifications:
-	email: false
+  email: false
