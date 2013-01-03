@@ -15,6 +15,7 @@ static int ReadableStream__chunkIsCompleted(struct ReadableStream *ws);
 static int ReadableStream__openNextChunk(struct ReadableStream *ws);
 static void ReadableStream__scheduleUpdateNotification(struct ReadableStream *ws);
 static void ReadableStream__findFirstChunk(struct ReadableStream *ws);
+static void ReadableStream__removeRootDir(struct ReadableStream *ws);
 
 void ReadableStream_init(struct ReadableStream *ws, const char *rootDir) {
 
@@ -41,6 +42,7 @@ ssize_t ReadableStream_read(struct ReadableStream *ws, char *buf, ssize_t size) 
 	if(ws->chunkFd == -1) {
 		if(ReadableStream__openNextChunk(ws) == -1) {
 			debug("end of stream detected");
+			ReadableStream__removeRootDir(ws);
 			return 0; /* end of stream */
 		}
 	}
@@ -55,6 +57,7 @@ ssize_t ReadableStream_read(struct ReadableStream *ws, char *buf, ssize_t size) 
 				if(ReadableStream__chunkIsCompleted(ws)) {
 					if(ReadableStream__openNextChunk(ws) == -1) {
 						debug("end of stream detected");
+						ReadableStream__removeRootDir(ws);
 						return 0; /* end of stream */
 					}
 
@@ -73,6 +76,13 @@ ssize_t ReadableStream_read(struct ReadableStream *ws, char *buf, ssize_t size) 
 	}
 
 	return r;
+}
+
+static void ReadableStream__removeRootDir(struct ReadableStream *ws) {
+	debug("removing root dir: %s", ws->rootDir);
+
+	if(rmdir(ws->rootDir) == -1)
+		error("rmdir('%s')", ws->rootDir);
 }
 
 static int ReadableStream__openNextChunk(struct ReadableStream *ws) {

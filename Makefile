@@ -1,7 +1,7 @@
 CC?=cc
 LD=$(CC)
 
-PROJECT=fsq
+PROJECT=buf
 
 OBJS=main.o common.o WriteableStream.o ReadableStream.o
 VPATH=src

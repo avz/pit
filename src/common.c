@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-void _fsq_debug(const char *fmt, ...) {
+void _buf_debug(const char *fmt, ...) {
 	va_list argp;
 
 	fprintf(stderr, "DBG ");
