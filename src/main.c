@@ -60,8 +60,10 @@ static void readMode(const char *rootDir) {
 
 	signal(SIGIO, _emptySignalHandler);
 
-	while((rd = ReadableStream_read(&rs, buf, sizeof(buf))) > 0)
-		write(STDOUT_FILENO, buf, (size_t)rd);
+	while((rd = ReadableStream_read(&rs, buf, sizeof(buf))) > 0) {
+		if(write(STDOUT_FILENO, buf, (size_t)rd) == -1)
+			error("write(STDOUT)");
+	}
 }
 
 static void printUsage(const char *cmd) {
