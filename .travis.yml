@@ -7,8 +7,8 @@ script:
 	- "CFLAGS='-O2 -DDEBUG' make test"
 
 compiler:
-	- clang
-	- gcc
-	
+  - clang
+  - gcc
+
 notifications:
-	email: false
+  email: false
