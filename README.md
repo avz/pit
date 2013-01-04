@@ -27,7 +27,7 @@
 ## Использование
 
 ```
-buf { -w [ -s bytes ][ -t seconds ] | -r } /path/to/storage/dir
+buf { -w [ -s bytes ][ -t seconds ][ -c ] | -r } /path/to/storage/dir
 ```
 
 ``/path/to/storage/dir`` - путь, по которому будет создан каталог с данными.
