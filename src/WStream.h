@@ -14,6 +14,7 @@
 
 struct WStream {
 	const char *rootDir;
+	int writerLockFd;
 
 	/**
 	 * порядковый номер текущего чанка
@@ -36,7 +37,7 @@ struct WStream {
 	int needNewChunk;
 };
 
-void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize);
+void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed);
 void WStream_destroy(struct WStream *ws);
 void WStream_needNewChunk(struct WStream *ws);
 

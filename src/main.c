@@ -19,7 +19,7 @@ static void _alarmSignalHandler(int sig) {
 	alarm(ALARM_INTERVAL);
 }
 
-static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunkTimeout) {
+static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunkTimeout, char resumeModeIsAllowed) {
 	char buf[64 * 1024];
 	ssize_t wr;
 
@@ -36,9 +36,11 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 		debug("\tchunk timeout: disabled");
 	}
 
+	debug("\tresume mode: %s", resumeModeIsAllowed ? "enabled" : "disabled");
+
 	debug("\tchunk size: %llu", (unsigned long long)chunkSize);
 
-	WStream_init(&WSTREAM, rootDir, chunkSize);
+	WStream_init(&WSTREAM, rootDir, chunkSize, resumeModeIsAllowed);
 
 	while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
 		WStream_write(&WSTREAM, buf, wr);
@@ -67,7 +69,7 @@ static void readMode(const char *rootDir) {
 }
 
 static void printUsage(const char *cmd) {
-	fprintf(stderr, "Usage: %s { -r | -w [ -s chunkSize ][ -t chunkTimeout ] } /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "Usage: %s { -r | -w [ -s chunkSize ][ -t chunkTimeout ][-c] } /path/to/storage/dir\n", cmd);
 }
 
 static void usage(const char *cmd) {
@@ -78,6 +80,7 @@ static void usage(const char *cmd) {
 int main(int argc, char *argv[]) {
 	char writeModeEnabled = 0;
 	char readModeEnabled = 0;
+	char resumeIsAllowed = 0;
 	unsigned long chunkSize = ULONG_MAX;
 	unsigned long chunkTimeout = ULONG_MAX;
 
@@ -85,7 +88,7 @@ int main(int argc, char *argv[]) {
 
 	int opt;
 
-	while((opt = getopt(argc, argv, "hwrs:t:")) != -1) {
+	while((opt = getopt(argc, argv, "hwrs:t:c")) != -1) {
 		switch(opt) {
 			case 'w':
 				writeModeEnabled = 1;
@@ -103,6 +106,9 @@ int main(int argc, char *argv[]) {
 				if(chunkTimeout == ULONG_MAX || chunkTimeout == 0 || chunkTimeout >= UINT_MAX)
 					error("invalid value: %s", optarg);
 			break;
+			case 'c':
+				resumeIsAllowed = 1;
+			break;
 			case 'h':
 				printUsage(argv[0]);
 				exit(0);
@@ -113,7 +119,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if(writeModeEnabled && readModeEnabled)
+	if((writeModeEnabled && readModeEnabled) || (!writeModeEnabled && !readModeEnabled))
 		usage(argv[0]);
 
 	if(optind >= argc)
@@ -123,6 +129,9 @@ int main(int argc, char *argv[]) {
 		usage(argv[0]);
 
 	if(readModeEnabled && chunkTimeout != ULONG_MAX)
+		usage(argv[0]);
+
+	if(!writeModeEnabled && resumeIsAllowed)
 		usage(argv[0]);
 
 	/* defaults */
@@ -136,7 +145,7 @@ int main(int argc, char *argv[]) {
 	rootDir = argv[optind];
 
 	if(writeModeEnabled)
-		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout);
+		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout, resumeIsAllowed);
 	else if(readModeEnabled)
 		readMode(rootDir);
 

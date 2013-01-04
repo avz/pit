@@ -18,18 +18,21 @@ static void RStream__findFirstChunk(struct RStream *ws);
 static void RStream__removeRootDir(struct RStream *ws);
 
 void RStream_init(struct RStream *ws, const char *rootDir) {
+	ws->chunkNumber = 0;
+	ws->chunkFd = -1;
+	ws->rootDir = rootDir;
 
 	ws->rootDirFd = open(rootDir, O_RDONLY | O_DIRECTORY);
 	if(ws->rootDirFd == -1)
 		error("open('%s')", rootDir);
 
 
-	if(flock(ws->rootDirFd, LOCK_EX | LOCK_NB) == -1)
-		error(rootDir);
-
-	ws->chunkNumber = 0;
-	ws->chunkFd = -1;
-	ws->rootDir = rootDir;
+	if(flock(ws->rootDirFd, LOCK_EX | LOCK_NB) == -1) {
+		if(errno == EWOULDBLOCK)
+			error("Stream '%s' already has a reader", rootDir);
+		else
+			error(rootDir);
+	}
 
 	RStream__findFirstChunk(ws);
 
@@ -79,7 +82,13 @@ ssize_t RStream_read(struct RStream *ws, char *buf, ssize_t size) {
 }
 
 static void RStream__removeRootDir(struct RStream *ws) {
+	char path[PATH_MAX];
+
 	debug("removing root dir: %s", ws->rootDir);
+
+	snprintf(path, sizeof(path), "%s/.writer.lock", ws->rootDir);
+	if(unlink(path) == -1)
+		warning("unable to unlink() write lock-file '%s'", path);
 
 	if(rmdir(ws->rootDir) == -1)
 		error("rmdir('%s')", ws->rootDir);
