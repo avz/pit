@@ -33,7 +33,7 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, ch
 		if(errno == EEXIST && resumeIsAllowed) {
 			resumeMode = 1;
 		} else {
-			if(errno = EEXIST)
+			if(errno == EEXIST)
 				error("stream directory '%s' already exists. If you want to continue writing try `-c` option", rootDir);
 			else
 				error("mkdir('%s')", rootDir);
