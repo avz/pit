@@ -20,7 +20,7 @@ for test in *.test.sh; do
 		echo "ok"
 	else
 		echo "failed. Error code $retCode, output:"
-		echo "$output" | sed -e 's/^/	/'
+		echo "$output" | sed -e 's/^/   	/'
 
 		fail="$fail $test"
 	fi
