@@ -9,7 +9,7 @@ notifications:
 
 before_script:
   - "make"
-  - "make install"
+  - "sudo make install"
 
 script:
   - "make test"
