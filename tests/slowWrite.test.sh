@@ -10,10 +10,12 @@ payloadSize=1000
 payload=$(dd if=/dev/urandom bs=$payloadSize count=1)
 chunkSize=$((payloadSize / 10))
 
-echo "$payload" | cstream -t $payloadSize | buf -s $chunkSize -w "$root" &
+payloadChecksum=$(echo -n "$payload" | md5sum)
+
+echo -n "$payload" | cstream -t $payloadSize | buf -s $chunkSize -w "$root" &
 sleep 0.1
 
-readedPayload=$(buf -r "$root")
+readedPayloadChecksum=$(buf -r "$root" | md5sum)
 retCode=$?
 
 if [ "$retCode" != "0" ]; then
@@ -21,11 +23,8 @@ if [ "$retCode" != "0" ]; then
 	exit $retCode
 fi
 
-if [ "$payload" != "$readedPayload" ]; then
-	echo "payload mismatch:"
-
-	echo "$payload" | hexdump -C
-	echo "$readedPayload" | hexdump -C
+if [ "$payloadChecksum" != "$readedPayloadChecksum" ]; then
+	echo "payload mismatch: '$payloadChecksum' != '$readedPayloadChecksum'"
 
 	exit 1
 fi
