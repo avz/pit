@@ -19,7 +19,7 @@ $(PROJECT): $(OBJS)
 clean:
 	rm -f *.o "$(PROJECT)"
 
-install:
+install: build
 	install "$(PROJECT)" "$(PREFIX)/bin"
 
 test:
