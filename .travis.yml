@@ -1,14 +1,15 @@
 language: c
 
-before_script:
-  - "make"
-
-script:
-  - "CFLAGS='-O2 -DDEBUG' make test"
-
 compiler:
   - clang
   - gcc
 
 notifications:
   email: false
+
+before_script:
+  - "make"
+  - "make install"
+
+script:
+  - "make test"

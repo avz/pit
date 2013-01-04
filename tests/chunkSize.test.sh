@@ -16,7 +16,7 @@ for size in 1 2 3 7 13 17 18 19 25 30 35 36 37 10000; do
 		continue
 	fi
 
-	receivedPayload=$(./buf -r "$root")
+	receivedPayload=$(buf -r "$root")
 	retCode=$?
 
 	if [ "$retCode" != "0" ]; then
