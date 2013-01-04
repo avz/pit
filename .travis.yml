@@ -7,6 +7,9 @@ compiler:
 notifications:
   email: false
 
+before_install:
+  - sudo apt-get install -qq cstream
+
 before_script:
   - "make"
   - "sudo make install"
