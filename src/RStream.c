@@ -9,15 +9,15 @@
 #include <limits.h>
 
 #include "common.h"
-#include "ReadableStream.h"
+#include "RStream.h"
 
-static int ReadableStream__chunkIsCompleted(struct ReadableStream *ws);
-static int ReadableStream__openNextChunk(struct ReadableStream *ws);
-static void ReadableStream__scheduleUpdateNotification(struct ReadableStream *ws);
-static void ReadableStream__findFirstChunk(struct ReadableStream *ws);
-static void ReadableStream__removeRootDir(struct ReadableStream *ws);
+static int RStream__chunkIsCompleted(struct RStream *ws);
+static int RStream__openNextChunk(struct RStream *ws);
+static void RStream__scheduleUpdateNotification(struct RStream *ws);
+static void RStream__findFirstChunk(struct RStream *ws);
+static void RStream__removeRootDir(struct RStream *ws);
 
-void ReadableStream_init(struct ReadableStream *ws, const char *rootDir) {
+void RStream_init(struct RStream *ws, const char *rootDir) {
 
 	ws->rootDirFd = open(rootDir, O_RDONLY | O_DIRECTORY);
 	if(ws->rootDirFd == -1)
@@ -31,18 +31,18 @@ void ReadableStream_init(struct ReadableStream *ws, const char *rootDir) {
 	ws->chunkFd = -1;
 	ws->rootDir = rootDir;
 
-	ReadableStream__findFirstChunk(ws);
+	RStream__findFirstChunk(ws);
 
 	debug("Start reading from chunk #%lu", ws->chunkNumber + 1);
 }
 
-ssize_t ReadableStream_read(struct ReadableStream *ws, char *buf, ssize_t size) {
+ssize_t RStream_read(struct RStream *ws, char *buf, ssize_t size) {
 	ssize_t r;
 
 	if(ws->chunkFd == -1) {
-		if(ReadableStream__openNextChunk(ws) == -1) {
+		if(RStream__openNextChunk(ws) == -1) {
 			debug("end of stream detected");
-			ReadableStream__removeRootDir(ws);
+			RStream__removeRootDir(ws);
 			return 0; /* end of stream */
 		}
 	}
@@ -54,17 +54,17 @@ ssize_t ReadableStream_read(struct ReadableStream *ws, char *buf, ssize_t size) 
 				/*
 				 * нечего было читать, значит надо проверить, не закончился ли чанк
 				 */
-				if(ReadableStream__chunkIsCompleted(ws)) {
-					if(ReadableStream__openNextChunk(ws) == -1) {
+				if(RStream__chunkIsCompleted(ws)) {
+					if(RStream__openNextChunk(ws) == -1) {
 						debug("end of stream detected");
-						ReadableStream__removeRootDir(ws);
+						RStream__removeRootDir(ws);
 						return 0; /* end of stream */
 					}
 
 					continue;
 				}
 
-				ReadableStream__scheduleUpdateNotification(ws);
+				RStream__scheduleUpdateNotification(ws);
 				usleep(100000);
 				continue;
 
@@ -78,14 +78,14 @@ ssize_t ReadableStream_read(struct ReadableStream *ws, char *buf, ssize_t size) 
 	return r;
 }
 
-static void ReadableStream__removeRootDir(struct ReadableStream *ws) {
+static void RStream__removeRootDir(struct RStream *ws) {
 	debug("removing root dir: %s", ws->rootDir);
 
 	if(rmdir(ws->rootDir) == -1)
 		error("rmdir('%s')", ws->rootDir);
 }
 
-static int ReadableStream__openNextChunk(struct ReadableStream *ws) {
+static int RStream__openNextChunk(struct RStream *ws) {
 	if(ws->chunkFd >= 0) {
 		if(unlink(ws->chunkPath) == -1)
 			error("unlink('%s')", ws->chunkPath);
@@ -112,7 +112,7 @@ static int ReadableStream__openNextChunk(struct ReadableStream *ws) {
  * @param ws
  * @return 1 or 0
  */
-static int ReadableStream__chunkIsCompleted(struct ReadableStream *ws) {
+static int RStream__chunkIsCompleted(struct RStream *ws) {
 	while(1) {
 		if(flock(ws->chunkFd, LOCK_EX | LOCK_NB) == -1) {
 			if(errno == EINTR)
@@ -131,7 +131,7 @@ static int ReadableStream__chunkIsCompleted(struct ReadableStream *ws) {
 	return 1;
 }
 
-static void ReadableStream__findFirstChunk(struct ReadableStream *ws) {
+static void RStream__findFirstChunk(struct RStream *ws) {
 	DIR *d;
 	struct dirent *e;
 	unsigned long min = ULONG_MAX;
@@ -165,7 +165,7 @@ static void ReadableStream__findFirstChunk(struct ReadableStream *ws) {
 	closedir(d);
 }
 
-static void ReadableStream__scheduleUpdateNotification(struct ReadableStream *ws) {
+static void RStream__scheduleUpdateNotification(struct RStream *ws) {
 #ifdef F_NOTIFY
 	if(fcntl(ws->rootDirFd, F_NOTIFY, DN_MODIFY) == -1)
 		error("fcntl('%s', F_NOTIFY, DN_MODIFY)", ws->rootDir);

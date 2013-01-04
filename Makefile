@@ -3,7 +3,7 @@ LD=$(CC)
 
 PROJECT=buf
 
-OBJS=main.o common.o WriteableStream.o ReadableStream.o
+OBJS=main.o common.o WStream.o RStream.o
 VPATH=src
 
 CFLAGS?=-O2

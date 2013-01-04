@@ -1,5 +1,5 @@
-#ifndef WRITEABLESTREAM_H
-#define	WRITEABLESTREAM_H
+#ifndef WSTREAM_H
+#define	WSTREAM_H
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -10,9 +10,9 @@
  * просто так менять константу нельзя
  *
  */
-#define WRITEABLE_STREAM_IDENT_LENGTH 19
+#define WSTREAM_IDENT_LENGTH 19
 
-struct WriteableStream {
+struct WStream {
 	const char *rootDir;
 
 	/**
@@ -36,11 +36,11 @@ struct WriteableStream {
 	int needNewChunk;
 };
 
-void WriteableStream_init(struct WriteableStream *ws, const char *rootDir, ssize_t chunkSize);
-void WriteableStream_destroy(struct WriteableStream *ws);
-void WriteableStream_needNewChunk(struct WriteableStream *ws);
+void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize);
+void WStream_destroy(struct WStream *ws);
+void WStream_needNewChunk(struct WStream *ws);
 
-void WriteableStream_write(struct WriteableStream *ws, const char *buf, ssize_t len);
+void WStream_write(struct WStream *ws, const char *buf, ssize_t len);
 
-#endif	/* WRITEABLESTREAM_H */
+#endif	/* WSTREAM_H */
 

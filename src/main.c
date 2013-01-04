@@ -4,17 +4,17 @@
 #include <sys/types.h>
 
 #include "common.h"
-#include "WriteableStream.h"
-#include "ReadableStream.h"
+#include "WStream.h"
+#include "RStream.h"
 
 #include <signal.h>
 
 unsigned int ALARM_INTERVAL = 1;
 
-struct WriteableStream WRITEABLE_STREAM;
+struct WStream WSTREAM;
 
 static void _alarmSignalHandler(int sig) {
-	WriteableStream_needNewChunk(&WRITEABLE_STREAM);
+	WStream_needNewChunk(&WSTREAM);
 
 	alarm(ALARM_INTERVAL);
 }
@@ -38,10 +38,10 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 
 	debug("\tchunk size: %llu", (unsigned long long)chunkSize);
 
-	WriteableStream_init(&WRITEABLE_STREAM, rootDir, chunkSize);
+	WStream_init(&WSTREAM, rootDir, chunkSize);
 
 	while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
-		WriteableStream_write(&WRITEABLE_STREAM, buf, wr);
+		WStream_write(&WSTREAM, buf, wr);
 }
 
 static void _emptySignalHandler(int sig) {
@@ -52,15 +52,15 @@ static void readMode(const char *rootDir) {
 	char buf[64 * 1024];
 	ssize_t rd;
 
-	struct ReadableStream rs;
+	struct RStream rs;
 
 	debug("Read mode: '%s'", rootDir);
 
-	ReadableStream_init(&rs, rootDir);
+	RStream_init(&rs, rootDir);
 
 	signal(SIGIO, _emptySignalHandler);
 
-	while((rd = ReadableStream_read(&rs, buf, sizeof(buf))) > 0) {
+	while((rd = RStream_read(&rs, buf, sizeof(buf))) > 0) {
 		if(write(STDOUT_FILENO, buf, (size_t)rd) == -1)
 			error("write(STDOUT)");
 	}

@@ -1,4 +1,4 @@
-#include "WriteableStream.h"
+#include "WStream.h"
 #include "common.h"
 
 #include <stdlib.h>
@@ -13,9 +13,9 @@
 #include <sys/stat.h>
 #include <limits.h>
 
-static void WriteableStream__createNextChunk(struct WriteableStream *ws);
+static void WStream__createNextChunk(struct WStream *ws);
 
-void WriteableStream_init(struct WriteableStream *ws, const char *rootDir, ssize_t chunkSize) {
+void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize) {
 	ws->rootDir = rootDir;
 	ws->chunkNumber = 0;
 
@@ -26,21 +26,21 @@ void WriteableStream_init(struct WriteableStream *ws, const char *rootDir, ssize
 	ws->needNewChunk = 0;
 	ws->chunkMaxSize = chunkSize;
 
-	WriteableStream__createNextChunk(ws);
+	WStream__createNextChunk(ws);
 }
 
-void WriteableStream_destroy(struct WriteableStream *ws) {
+void WStream_destroy(struct WStream *ws) {
 	if(ws->chunkFd)
 		close(ws->chunkFd);
 
 	ws->chunkFd = -1;
 }
 
-void WriteableStream_write(struct WriteableStream *ws, const char *buf, ssize_t len) {
+void WStream_write(struct WStream *ws, const char *buf, ssize_t len) {
 	ssize_t written = 0;
 
 	if(!ws->chunkNumber)
-		WriteableStream__createNextChunk(ws);
+		WStream__createNextChunk(ws);
 
 	do {
 		while(written != len && ws->chunkSize < ws->chunkMaxSize) {
@@ -59,7 +59,7 @@ void WriteableStream_write(struct WriteableStream *ws, const char *buf, ssize_t 
 
 				debug("chunk size overflow (%llu bytes)", (unsigned long long)ws->chunkMaxSize);
 
-				WriteableStream__createNextChunk(ws);
+				WStream__createNextChunk(ws);
 				fdMustBeClosed = 1;
 			} else {
 				ws->chunkSize += toWriteInThisChunk;
@@ -81,7 +81,7 @@ void WriteableStream_write(struct WriteableStream *ws, const char *buf, ssize_t 
 			if(fdMustBeClosed) {
 				close(fd);
 			} else if(ws->needNewChunk) {
-				WriteableStream__createNextChunk(ws);
+				WStream__createNextChunk(ws);
 				close(fd);
 
 				ws->needNewChunk = 0;
@@ -91,12 +91,12 @@ void WriteableStream_write(struct WriteableStream *ws, const char *buf, ssize_t 
 
 }
 
-void WriteableStream_needNewChunk(struct WriteableStream *ws) {
+void WStream_needNewChunk(struct WStream *ws) {
 	debug("new chunk requested");
 	ws->needNewChunk = 1;
 }
 
-static void WriteableStream__createNextChunk(struct WriteableStream *ws) {
+static void WStream__createNextChunk(struct WStream *ws) {
 	char tmpPathBuf[PATH_MAX + 64];
 	char pathBuf[PATH_MAX + 64];
 
