@@ -68,9 +68,9 @@ static void readMode(const char *rootDir, char multiReaderModeEnabled, char pers
 	debug("\tpersistent mode: %s", persistentMode ? "enabled" : "disabled");
 	debug("\twait root mode: %s", waitRootMode ? "enabled" : "disabled");
 
-	RStream_init(&rs, rootDir, multiReaderModeEnabled, persistentMode, waitRootMode);
-
 	signal(SIGIO, _emptySignalHandler);
+
+	RStream_init(&rs, rootDir, multiReaderModeEnabled, persistentMode, waitRootMode);
 
 	while((rd = RStream_read(&rs, buf, sizeof(buf))) > 0) {
 		if(write(STDOUT_FILENO, buf, (size_t)rd) == -1)

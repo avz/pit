@@ -45,7 +45,8 @@ void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeE
 		} else if(waitRootMode)  {
 			/* тут нужно дополнительно проверить появился ли хоть один чанк */
 			if(!RStream__rootHasChunks(rs)) {
-				usleep(100000);
+				RStream__scheduleUpdateNotification(rs);
+				usleep(1000000);
 				continue;
 			}
 
@@ -251,7 +252,7 @@ static int RStream__openNextChunk(struct RStream *rs) {
 			if(rs->chunkFd >= 0)
 				break;
 
-			usleep(10000);
+			usleep(100000);
 		} while(rs->chunkFd == RSTREAM_NO_MORE_NOT_ACQUIRED_FILES || (rs->persistentMode && rs->chunkFd == RSTREAM_DIR_IS_EMPTY));
 
 	} else {
