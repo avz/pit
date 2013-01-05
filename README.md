@@ -83,7 +83,7 @@ cd /tmp && git clone https://github.com/avz/buf.git && cd buf && sudo make insta
 ## Использование
 
 ```
-buf -r [-mp] /path/to/storage/dir
+buf -r [-mpW] /path/to/storage/dir
 buf -w [ -s bytes ][ -t seconds ][-cl] /path/to/storage/dir
 ```
 
