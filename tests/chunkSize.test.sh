@@ -12,8 +12,8 @@ payloadSize=36
 for size in 1 2 3 7 13 17 18 19 25 30 35 36 37 10000; do
 	rm -rf "$root"
 
-	if ! echo -n "$payload" | buf -s "$size" -w "$root"; then
-		echo "buf -w error, code $?"
+	if ! echo -n "$payload" | ./buf -s "$size" -w "$root"; then
+		echo "./buf -w error, code $?"
 		fail=1
 		continue
 	fi
@@ -27,7 +27,7 @@ for size in 1 2 3 7 13 17 18 19 25 30 35 36 37 10000; do
 		fail=1
 	fi
 
-	receivedPayload=$(buf -r "$root")
+	receivedPayload=$(./buf -r "$root")
 	retCode=$?
 
 	if [ "$retCode" != "0" ]; then
