@@ -131,7 +131,7 @@ static int RStream__openNotAcquiredChunk(struct RStream *rs) {
 		error("unable to fetch directory listing of '%s'", rs->rootDir);
 
 	for(i=0; i<numFiles; i++) {
-		if(list[i]->d_name[0] == '.' || !strstr(list[i]->d_name, ".chunk"))
+		if(list[i]->d_name[0] == '.' || strstr(list[i]->d_name, ".chunk") != list[i]->d_name + (strlen(list[i]->d_name) - 6))
 			continue;
 
 		numChunks++;
