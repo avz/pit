@@ -20,7 +20,7 @@ if ! dd if="$payloadPath" ibs=$((1024*1024)) skip=5 | ./buf -cls 10000 -w "$root
 	exit $?
 fi
 
-sleep 0.5
+sleep 1
 rm -rf "$root"
 
 wait $j1
