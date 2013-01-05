@@ -37,7 +37,7 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 	}
 
 	debug("\tresume mode: %s", resumeModeIsAllowed ? "enabled" : "disabled");
-
+	debug("\tline mode: %s", lineModeEnabled ? "enabled" : "disabled");
 	debug("\tchunk size: %llu", (unsigned long long)chunkSize);
 
 	WStream_init(&WSTREAM, rootDir, chunkSize, resumeModeIsAllowed);
@@ -57,15 +57,18 @@ static void _emptySignalHandler(int sig) {
 
 }
 
-static void readMode(const char *rootDir, char multiReaderModeEnabled, char persistentMode) {
+static void readMode(const char *rootDir, char multiReaderModeEnabled, char persistentMode, char waitRootMode) {
 	char buf[64 * 1024];
 	ssize_t rd;
 
 	struct RStream rs;
 
-	debug("Read mode: '%s'", rootDir);
+	debug("Read mode: '%s'. Options:", rootDir);
+	debug("\tmilti-reader mode: %s", multiReaderModeEnabled ? "enabled" : "disabled");
+	debug("\tpersistent mode: %s", persistentMode ? "enabled" : "disabled");
+	debug("\twait root mode: %s", waitRootMode ? "enabled" : "disabled");
 
-	RStream_init(&rs, rootDir, multiReaderModeEnabled, persistentMode);
+	RStream_init(&rs, rootDir, multiReaderModeEnabled, persistentMode, waitRootMode);
 
 	signal(SIGIO, _emptySignalHandler);
 
@@ -77,7 +80,7 @@ static void readMode(const char *rootDir, char multiReaderModeEnabled, char pers
 
 static void printUsage(const char *cmd) {
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "\t%s [-mp] -r /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "\t%s [-mpW] -r /path/to/storage/dir\n", cmd);
 	fprintf(stderr, "\t%s -w [ -s chunkSize ][ -t chunkTimeout ][-cl] /path/to/storage/dir\n", cmd);
 	fprintf(stderr, "Additional info available at https://github.com/avz/buf/\n");
 }
@@ -94,6 +97,8 @@ int main(int argc, char *argv[]) {
 	char lineMode = 0;
 	char multiReaderMode = 0;
 	char persistentMode = 0;
+	char waitRootMode = 0;
+
 	unsigned long chunkSize = ULONG_MAX;
 	unsigned long chunkTimeout = ULONG_MAX;
 
@@ -101,7 +106,7 @@ int main(int argc, char *argv[]) {
 
 	int opt;
 
-	while((opt = getopt(argc, argv, "hmlwprs:t:c")) != -1) {
+	while((opt = getopt(argc, argv, "hmlwWprs:t:c")) != -1) {
 		switch(opt) {
 			case 'w':
 				writeModeEnabled = 1;
@@ -130,6 +135,9 @@ int main(int argc, char *argv[]) {
 			break;
 			case 'p':
 				persistentMode = 1;
+			break;
+			case 'W':
+				waitRootMode = 1;
 			break;
 			case 'h':
 				printUsage(argv[0]);
@@ -165,6 +173,9 @@ int main(int argc, char *argv[]) {
 	if(!readModeEnabled && persistentMode)
 		usage(argv[0]);
 
+	if(!readModeEnabled && waitRootMode)
+		usage(argv[0]);
+
 	/* defaults */
 
 	if(chunkSize == ULONG_MAX)
@@ -178,7 +189,7 @@ int main(int argc, char *argv[]) {
 	if(writeModeEnabled)
 		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout, resumeIsAllowed, lineMode);
 	else if(readModeEnabled)
-		readMode(rootDir, multiReaderMode, persistentMode);
+		readMode(rootDir, multiReaderMode, persistentMode, waitRootMode);
 
 	return EXIT_SUCCESS;
 }

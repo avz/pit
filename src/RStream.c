@@ -22,7 +22,7 @@ static void RStream__findFirstChunk(struct RStream *ws);
 static void RStream__removeRootDir(struct RStream *ws);
 static int RStream__openNotAcquiredChunk(struct RStream *rs);
 
-void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeEnabled, char persistentMode) {
+void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeEnabled, char persistentMode, char waitRootMode) {
 	int flockOps;
 	rs->chunkNumber = 0;
 	rs->chunkFd = -1;
@@ -30,9 +30,18 @@ void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeE
 	rs->multiReaderMode = multiReaderModeEnabled;
 	rs->persistentMode = persistentMode;
 
-	rs->rootDirFd = open(rootDir, O_RDONLY | O_DIRECTORY);
-	if(rs->rootDirFd == -1)
-		error("open('%s')", rootDir);
+	do {
+		rs->rootDirFd = open(rootDir, O_RDONLY | O_DIRECTORY);
+		if(rs->rootDirFd == -1) {
+			if(waitRootMode && errno == ENOENT) {
+				usleep(100000);
+				continue;
+			}
+			error("open('%s')", rootDir);
+		} else {
+			break;
+		}
+	} while(waitRootMode);
 
 	if(multiReaderModeEnabled)
 		flockOps = LOCK_SH;

@@ -20,7 +20,7 @@ struct RStream {
 	int chunkFd;
 };
 
-void RStream_init(struct RStream *ws, const char *rootDir, char multiReaderModeEnabled, char persistentMode);
+void RStream_init(struct RStream *ws, const char *rootDir, char multiReaderModeEnabled, char persistentMode, char waitRootMode);
 ssize_t RStream_read(struct RStream *ws, char *buf, ssize_t size);
 
 #endif	/* RSTREAM_H */
