@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# читатель быстрее писателя
+# два читателя на одного писателя
 
 root=/tmp/___bufTest
 
@@ -30,4 +30,4 @@ if [ "$poChecksum" != "$prChecksum" ]; then
 	exit 2
 fi
 
-#rm "$payloadPath" "/tmp/1.payload" "/tmp/2.payload"
+rm "$payloadPath" "/tmp/1.payload" "/tmp/2.payload"
