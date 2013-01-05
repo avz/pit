@@ -19,7 +19,7 @@ static void _alarmSignalHandler(int sig) {
 	alarm(ALARM_INTERVAL);
 }
 
-static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunkTimeout, char resumeModeIsAllowed) {
+static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunkTimeout, char resumeModeIsAllowed, char lineModeEnabled) {
 	char buf[64 * 1024];
 	ssize_t wr;
 
@@ -42,15 +42,20 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 
 	WStream_init(&WSTREAM, rootDir, chunkSize, resumeModeIsAllowed);
 
-	while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
-		WStream_write(&WSTREAM, buf, wr);
+	if(lineModeEnabled) {
+		while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
+			WStream_writeLines(&WSTREAM, buf, wr);
+	} else {
+		while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
+			WStream_write(&WSTREAM, buf, wr);
+	}
 }
 
 static void _emptySignalHandler(int sig) {
 
 }
 
-static void readMode(const char *rootDir) {
+static void readMode(const char *rootDir, char multiReaderModeEnabled) {
 	char buf[64 * 1024];
 	ssize_t rd;
 
@@ -58,7 +63,7 @@ static void readMode(const char *rootDir) {
 
 	debug("Read mode: '%s'", rootDir);
 
-	RStream_init(&rs, rootDir);
+	RStream_init(&rs, rootDir, multiReaderModeEnabled);
 
 	signal(SIGIO, _emptySignalHandler);
 
@@ -69,7 +74,10 @@ static void readMode(const char *rootDir) {
 }
 
 static void printUsage(const char *cmd) {
-	fprintf(stderr, "Usage: %s { -r | -w [ -s chunkSize ][ -t chunkTimeout ][-c] } /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "\t%s [-m] -r /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "\t%s -w [ -s chunkSize ][ -t chunkTimeout ][-cl] /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "Additional info available at https://github.com/avz/buf/\n", cmd);
 }
 
 static void usage(const char *cmd) {
@@ -81,6 +89,8 @@ int main(int argc, char *argv[]) {
 	char writeModeEnabled = 0;
 	char readModeEnabled = 0;
 	char resumeIsAllowed = 0;
+	char lineMode = 0;
+	char multiReaderMode = 0;
 	unsigned long chunkSize = ULONG_MAX;
 	unsigned long chunkTimeout = ULONG_MAX;
 
@@ -88,7 +98,7 @@ int main(int argc, char *argv[]) {
 
 	int opt;
 
-	while((opt = getopt(argc, argv, "hwrs:t:c")) != -1) {
+	while((opt = getopt(argc, argv, "hmlwrs:t:c")) != -1) {
 		switch(opt) {
 			case 'w':
 				writeModeEnabled = 1;
@@ -108,6 +118,12 @@ int main(int argc, char *argv[]) {
 			break;
 			case 'c':
 				resumeIsAllowed = 1;
+			break;
+			case 'l':
+				lineMode = 1;
+			break;
+			case 'm':
+				multiReaderMode = 1;
 			break;
 			case 'h':
 				printUsage(argv[0]);
@@ -134,10 +150,16 @@ int main(int argc, char *argv[]) {
 	if(!writeModeEnabled && resumeIsAllowed)
 		usage(argv[0]);
 
+	if(!writeModeEnabled && lineMode)
+		usage(argv[0]);
+
+	if(!readModeEnabled && multiReaderMode)
+		usage(argv[0]);
+
 	/* defaults */
 
 	if(chunkSize == ULONG_MAX)
-		chunkSize = 100 * 1024 * 1024;
+		chunkSize = 1 * 1024 * 1024;
 
 	if(chunkTimeout == ULONG_MAX)
 		chunkTimeout = 0;
@@ -145,9 +167,9 @@ int main(int argc, char *argv[]) {
 	rootDir = argv[optind];
 
 	if(writeModeEnabled)
-		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout, resumeIsAllowed);
+		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout, resumeIsAllowed, lineMode);
 	else if(readModeEnabled)
-		readMode(rootDir);
+		readMode(rootDir, multiReaderMode);
 
 	return EXIT_SUCCESS;
 }

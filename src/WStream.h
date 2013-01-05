@@ -11,10 +11,15 @@
  *
  */
 #define WSTREAM_IDENT_LENGTH 19
+#define WSTREAM_LINE_MAX_LENGTH (1*1024*1024)
 
 struct WStream {
 	const char *rootDir;
 	int writerLockFd;
+
+	char *lineBuffer;
+	ssize_t lineBufferMaxSize;
+	ssize_t lineBufferSize;
 
 	/**
 	 * порядковый номер текущего чанка
@@ -42,6 +47,7 @@ void WStream_destroy(struct WStream *ws);
 void WStream_needNewChunk(struct WStream *ws);
 
 void WStream_write(struct WStream *ws, const char *buf, ssize_t len);
+void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len);
 
 #endif	/* WSTREAM_H */
 
