@@ -9,6 +9,7 @@ struct RStream {
 	int rootDirFd;
 
 	char multiReaderMode;
+	char persistentMode;
 
 	/**
 	 * порядковый номер текущего чанка
@@ -19,7 +20,7 @@ struct RStream {
 	int chunkFd;
 };
 
-void RStream_init(struct RStream *ws, const char *rootDir, char multiReaderModeEnabled);
+void RStream_init(struct RStream *ws, const char *rootDir, char multiReaderModeEnabled, char persistentMode);
 ssize_t RStream_read(struct RStream *ws, char *buf, ssize_t size);
 
 #endif	/* RSTREAM_H */

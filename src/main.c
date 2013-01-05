@@ -55,7 +55,7 @@ static void _emptySignalHandler(int sig) {
 
 }
 
-static void readMode(const char *rootDir, char multiReaderModeEnabled) {
+static void readMode(const char *rootDir, char multiReaderModeEnabled, char persistentMode) {
 	char buf[64 * 1024];
 	ssize_t rd;
 
@@ -63,7 +63,7 @@ static void readMode(const char *rootDir, char multiReaderModeEnabled) {
 
 	debug("Read mode: '%s'", rootDir);
 
-	RStream_init(&rs, rootDir, multiReaderModeEnabled);
+	RStream_init(&rs, rootDir, multiReaderModeEnabled, persistentMode);
 
 	signal(SIGIO, _emptySignalHandler);
 
@@ -91,6 +91,7 @@ int main(int argc, char *argv[]) {
 	char resumeIsAllowed = 0;
 	char lineMode = 0;
 	char multiReaderMode = 0;
+	char persistentMode = 0;
 	unsigned long chunkSize = ULONG_MAX;
 	unsigned long chunkTimeout = ULONG_MAX;
 
@@ -98,7 +99,7 @@ int main(int argc, char *argv[]) {
 
 	int opt;
 
-	while((opt = getopt(argc, argv, "hmlwrs:t:c")) != -1) {
+	while((opt = getopt(argc, argv, "hmlwprs:t:c")) != -1) {
 		switch(opt) {
 			case 'w':
 				writeModeEnabled = 1;
@@ -124,6 +125,9 @@ int main(int argc, char *argv[]) {
 			break;
 			case 'm':
 				multiReaderMode = 1;
+			break;
+			case 'p':
+				persistentMode = 1;
 			break;
 			case 'h':
 				printUsage(argv[0]);
@@ -156,6 +160,9 @@ int main(int argc, char *argv[]) {
 	if(!readModeEnabled && multiReaderMode)
 		usage(argv[0]);
 
+	if(!readModeEnabled && persistentMode)
+		usage(argv[0]);
+
 	/* defaults */
 
 	if(chunkSize == ULONG_MAX)
@@ -169,7 +176,7 @@ int main(int argc, char *argv[]) {
 	if(writeModeEnabled)
 		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout, resumeIsAllowed, lineMode);
 	else if(readModeEnabled)
-		readMode(rootDir, multiReaderMode);
+		readMode(rootDir, multiReaderMode, persistentMode);
 
 	return EXIT_SUCCESS;
 }
