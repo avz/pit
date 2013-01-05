@@ -154,8 +154,6 @@ static int RStream__openNotAcquiredChunk(struct RStream *rs) {
 				/* ничего страшного, просто файл удалили пока мы сканили */
 				debug("    - deleted before lock");
 
-				close(fd);
-				fd = -1;
 				continue;
 			}
 
