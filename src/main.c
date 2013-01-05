@@ -49,6 +49,8 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 		while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
 			WStream_write(&WSTREAM, buf, wr);
 	}
+
+	WStream_flush(&WSTREAM);
 }
 
 static void _emptySignalHandler(int sig) {

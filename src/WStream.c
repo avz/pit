@@ -77,6 +77,13 @@ void WStream_write(struct WStream *ws, const char *buf, ssize_t len) {
 	WStream__write(ws, buf, len, 0);
 }
 
+void WStream_flush(struct WStream *ws) {
+	if(ws->lineBuffer && ws->lineBufferSize && ws->chunkFd >= 0) {
+		WStream__write(ws, ws->lineBuffer, ws->lineBufferSize, 1);
+		ws->lineBufferSize = 0;
+	}
+}
+
 /**
  * В отличии от WStream_write() эта функция гарантирует, что строка будет
  * целиком записана в один чанк без разбивки.

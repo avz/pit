@@ -48,6 +48,7 @@ void WStream_needNewChunk(struct WStream *ws);
 
 void WStream_write(struct WStream *ws, const char *buf, ssize_t len);
 void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len);
+void WStream_flush(struct WStream *ws);
 
 #endif	/* WSTREAM_H */
 
