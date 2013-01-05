@@ -75,6 +75,51 @@ void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeE
 	debug("Start reading from chunk #%lu", rs->chunkNumber + 1);
 }
 
+/**
+ * Закрыть дескрипторы и записать оффсет текущего чанка в ФС
+ * @param rs
+ */
+void RStream_destroy(struct RStream *rs) {
+	while(rs->chunkFd >= 0) {
+		int offsetFileFd;
+		char offsetStringBuf[64];
+		int offsetStringLen;
+		off_t offset = lseek(rs->chunkFd, 0, SEEK_CUR);
+
+		if(offset == (off_t)-1) {
+			warning("unable to get current chunk position: %s", strerror(errno));
+			break;
+		}
+
+		if(offset >= ULONG_MAX) {
+			warning("offset is too big: %llu", (unsigned long long)offset);
+			break;
+		}
+
+		offsetFileFd = open(rs->chunkOffsetPath, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+		if(offsetFileFd == -1) {
+			warning("Unable to open offset file '%s': %s", rs->chunkOffsetPath, strerror(errno));
+			break;
+		}
+
+		offsetStringLen = snprintf(offsetStringBuf, sizeof(offsetStringBuf), "%lu\n", (unsigned long)offset);
+
+		if(write(offsetFileFd, offsetStringBuf, (size_t)offsetStringLen) == -1) {
+			warning("Unable to write to offset file '%s': %s", rs->chunkOffsetPath, strerror(errno));
+		}
+
+		close(offsetFileFd);
+
+		close(rs->chunkFd);
+		rs->chunkFd = -1;
+	}
+
+	if(rs->rootDirFd >= 0) {
+		close(rs->rootDirFd);
+		rs->rootDirFd = -1;
+	}
+}
+
 ssize_t RStream_read(struct RStream *rs, char *buf, ssize_t size) {
 	ssize_t r;
 
@@ -118,7 +163,7 @@ ssize_t RStream_read(struct RStream *rs, char *buf, ssize_t size) {
 }
 
 static void RStream__removeRootDir(struct RStream *rs) {
-	char path[PATH_MAX];
+	char path[PATH_MAX + 64];
 
 	debug("removing root dir: %s", rs->rootDir);
 
@@ -242,6 +287,11 @@ static int RStream__openNextChunk(struct RStream *rs) {
 		if(unlink(rs->chunkPath) == -1)
 			error("unlink('%s')", rs->chunkPath);
 
+		if(unlink(rs->chunkOffsetPath) == -1) {
+			if(errno != ENOENT)
+				warning("unable to unlink offset file '%s': %s", rs->chunkOffsetPath, strerror(errno));
+		}
+
 		close(rs->chunkFd);
 		rs->chunkFd = -1;
 	}
@@ -266,6 +316,43 @@ static int RStream__openNextChunk(struct RStream *rs) {
 		if(rs->chunkFd == -1)
 			debug("error opening chunk [%s]: %s", rs->chunkPath, strerror(errno));
 
+	}
+
+	/* проверяем нет ли информации о уже прочитанных из чанка данных */
+	if(rs->chunkFd >= 0) {
+		int offsetFileFd;
+
+		snprintf(rs->chunkOffsetPath, sizeof(rs->chunkOffsetPath), "%s.offset", rs->chunkPath);
+
+		offsetFileFd = open(rs->chunkOffsetPath, O_RDONLY);
+		if(offsetFileFd >= 0) {
+			char buf[64];
+			ssize_t bufLen;
+			unsigned long offset;
+
+			debug("Found offset-file '%s'", rs->chunkOffsetPath)
+
+			if((bufLen = read(offsetFileFd, buf, sizeof(buf) - 1)) == -1) {
+				warning("Error reading offset-file '%s': %s", rs->chunkOffsetPath, strerror(errno));
+			} else {
+				buf[bufLen] = 0;
+
+				offset = strtoul(buf, NULL, 10);
+				if(offset == ULONG_MAX) {
+					warning("unable to parse offset from '%s': invalid string '%s'", rs->chunkOffsetPath, buf);
+				} else {
+					if(lseek(rs->chunkFd, (off_t)offset, SEEK_SET) == (off_t)-1)
+						warning("unable to seek to offset %lu on file '%s'", offset, rs->chunkOffsetPath);
+				}
+
+				debug("	offset: strtoul('%s') = %lu", buf, offset);
+			}
+
+			close(offsetFileFd);
+		} else {
+			if(errno != ENOENT)
+				warning("Error opening offset-file '%s': %s", rs->chunkOffsetPath, strerror(errno));
+		}
 	}
 
 	return rs->chunkFd;

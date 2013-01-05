@@ -12,6 +12,7 @@
 unsigned int ALARM_INTERVAL = 1;
 
 struct WStream WSTREAM;
+struct RStream RSTREAM;
 
 static void _alarmSignalHandler(int sig) {
 	WStream_needNewChunk(&WSTREAM);
@@ -57,11 +58,15 @@ static void _emptySignalHandler(int sig) {
 
 }
 
+static void _rstreamDestroySignalHandler(int sig) {
+	RStream_destroy(&RSTREAM);
+
+	exit(sig + 128);
+}
+
 static void readMode(const char *rootDir, char multiReaderModeEnabled, char persistentMode, char waitRootMode) {
 	char buf[64 * 1024];
 	ssize_t rd;
-
-	struct RStream rs;
 
 	debug("Read mode: '%s'. Options:", rootDir);
 	debug("\tmilti-reader mode: %s", multiReaderModeEnabled ? "enabled" : "disabled");
@@ -70,9 +75,14 @@ static void readMode(const char *rootDir, char multiReaderModeEnabled, char pers
 
 	signal(SIGIO, _emptySignalHandler);
 
-	RStream_init(&rs, rootDir, multiReaderModeEnabled, persistentMode, waitRootMode);
+	signal(SIGHUP, _rstreamDestroySignalHandler);
+	signal(SIGINT, _rstreamDestroySignalHandler);
+	signal(SIGTERM, _rstreamDestroySignalHandler);
+	signal(SIGPIPE, _rstreamDestroySignalHandler);
 
-	while((rd = RStream_read(&rs, buf, sizeof(buf))) > 0) {
+	RStream_init(&RSTREAM, rootDir, multiReaderModeEnabled, persistentMode, waitRootMode);
+
+	while((rd = RStream_read(&RSTREAM, buf, sizeof(buf))) > 0) {
 		if(write(STDOUT_FILENO, buf, (size_t)rd) == -1)
 			error("write(STDOUT)");
 	}
