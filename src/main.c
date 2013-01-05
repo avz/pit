@@ -75,7 +75,7 @@ static void readMode(const char *rootDir, char multiReaderModeEnabled, char pers
 
 static void printUsage(const char *cmd) {
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "\t%s [-m] -r /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "\t%s [-mp] -r /path/to/storage/dir\n", cmd);
 	fprintf(stderr, "\t%s -w [ -s chunkSize ][ -t chunkTimeout ][-cl] /path/to/storage/dir\n", cmd);
 	fprintf(stderr, "Additional info available at https://github.com/avz/buf/\n");
 }
