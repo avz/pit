@@ -21,23 +21,35 @@ static void RStream__scheduleUpdateNotification(struct RStream *ws);
 static void RStream__findFirstChunk(struct RStream *ws);
 static void RStream__removeRootDir(struct RStream *ws);
 static int RStream__openNotAcquiredChunk(struct RStream *rs);
+static char RStream__rootHasChunks(struct RStream *rs);
 
 void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeEnabled, char persistentMode, char waitRootMode) {
 	int flockOps;
 	rs->chunkNumber = 0;
 	rs->chunkFd = -1;
+	rs->rootDirFd = -1;
 	rs->rootDir = rootDir;
 	rs->multiReaderMode = multiReaderModeEnabled;
 	rs->persistentMode = persistentMode;
 
 	do {
-		rs->rootDirFd = open(rootDir, O_RDONLY | O_DIRECTORY);
+		if(rs->rootDirFd == -1)
+			rs->rootDirFd = open(rootDir, O_RDONLY | O_DIRECTORY);
+
 		if(rs->rootDirFd == -1) {
 			if(waitRootMode && errno == ENOENT) {
 				usleep(100000);
 				continue;
 			}
 			error("open('%s')", rootDir);
+		} else if(waitRootMode)  {
+			/* тут нужно дополнительно проверить появился ли хоть один чанк */
+			if(!RStream__rootHasChunks(rs)) {
+				usleep(100000);
+				continue;
+			}
+
+			break;
 		} else {
 			break;
 		}
@@ -280,6 +292,29 @@ static int RStream__chunkIsCompleted(struct RStream *rs) {
 	}
 
 	return 1;
+}
+
+static char RStream__rootHasChunks(struct RStream *rs) {
+	DIR *d;
+	struct dirent *e;
+
+	debug("Checking '%s' for chunks", rs->rootDir);
+
+	d = opendir(rs->rootDir);
+	if(!d)
+		error("opendir(%s)", rs->rootDir);
+
+	while((e = readdir(d))) {
+		if(e->d_name[0] == '.' || strstr(e->d_name, ".chunk") != e->d_name + (strlen(e->d_name) - 6))
+			continue;
+
+		closedir(d);
+		return 1;
+	}
+
+	closedir(d);
+
+	return 0;
 }
 
 static void RStream__findFirstChunk(struct RStream *rs) {
