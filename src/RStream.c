@@ -13,6 +13,7 @@
 
 #define RSTREAM_DIR_IS_EMPTY -1
 #define RSTREAM_NO_MORE_NOT_ACQUIRED_FILES -2
+#define RSTREAM_ROOT_DELETED -3
 
 static int RStream__chunkIsCompleted(struct RStream *ws);
 static int RStream__openNextChunk(struct RStream *ws);
@@ -56,7 +57,7 @@ ssize_t RStream_read(struct RStream *rs, char *buf, ssize_t size) {
 	ssize_t r;
 
 	if(rs->chunkFd == -1) {
-		if(RStream__openNextChunk(rs) == -1) {
+		if(RStream__openNextChunk(rs) < 0) {
 			debug("end of stream detected");
 			RStream__removeRootDir(rs);
 			return 0; /* end of stream */
@@ -71,7 +72,7 @@ ssize_t RStream_read(struct RStream *rs, char *buf, ssize_t size) {
 				 * нечего было читать, значит надо проверить, не закончился ли чанк
 				 */
 				if(RStream__chunkIsCompleted(rs)) {
-					if(RStream__openNextChunk(rs) == -1) {
+					if(RStream__openNextChunk(rs) < 0) {
 						debug("end of stream detected");
 						RStream__removeRootDir(rs);
 						return 0; /* end of stream */
@@ -128,8 +129,12 @@ static int RStream__openNotAcquiredChunk(struct RStream *rs) {
 	debug("staring scandir() on '%s'", rs->rootDir);
 
 	numFiles = scandir(rs->rootDir, &list, NULL, alphasort);
-	if(numFiles == -1)
+	if(numFiles == -1) {
+		if(errno == ENOENT)
+			return RSTREAM_ROOT_DELETED;
+
 		error("unable to fetch directory listing of '%s'", rs->rootDir);
+	}
 
 	for(i=0; i<numFiles; i++) {
 		if(list[i]->d_name[0] == '.' || strstr(list[i]->d_name, ".chunk") != list[i]->d_name + (strlen(list[i]->d_name) - 6))
