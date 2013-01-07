@@ -18,7 +18,6 @@
 static int RStream__chunkIsCompleted(struct RStream *ws);
 static int RStream__openNextChunk(struct RStream *ws);
 static void RStream__scheduleUpdateNotification(struct RStream *ws);
-static void RStream__findFirstChunk(struct RStream *ws);
 static void RStream__removeRootDir(struct RStream *ws);
 static int RStream__openNotAcquiredChunk(struct RStream *rs);
 static char RStream__rootHasChunks(struct RStream *rs);
@@ -67,10 +66,6 @@ void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeE
 		else
 			error(rootDir);
 	}
-
-	/* в мультирид-режиме чанк выбирается внутри RStream__openNextChunk */
-	if(!rs->multiReaderMode)
-		RStream__findFirstChunk(rs);
 
 	debug("Start reading from chunk #%lu", rs->chunkNumber + 1);
 }
@@ -296,27 +291,13 @@ static int RStream__openNextChunk(struct RStream *rs) {
 		rs->chunkFd = -1;
 	}
 
-	if(rs->multiReaderMode || rs->persistentMode) {
-		do {
-			rs->chunkFd = RStream__openNotAcquiredChunk(rs);
-			if(rs->chunkFd >= 0)
-				break;
+	do {
+		rs->chunkFd = RStream__openNotAcquiredChunk(rs);
+		if(rs->chunkFd >= 0)
+			break;
 
-			usleep(100000);
-		} while(rs->chunkFd == RSTREAM_NO_MORE_NOT_ACQUIRED_FILES || (rs->persistentMode && rs->chunkFd == RSTREAM_DIR_IS_EMPTY));
-
-	} else {
-		rs->chunkNumber++;
-
-		/* @todo path overflow detection */
-		snprintf(rs->chunkPath, sizeof(rs->chunkPath), "%s/%010lu.chunk", rs->rootDir, rs->chunkNumber);
-
-		debug("opening next chunk: %s", rs->chunkPath);
-		rs->chunkFd = open(rs->chunkPath, O_RDONLY);
-		if(rs->chunkFd == -1)
-			debug("error opening chunk [%s]: %s", rs->chunkPath, strerror(errno));
-
-	}
+		usleep(100000);
+	} while(rs->chunkFd == RSTREAM_NO_MORE_NOT_ACQUIRED_FILES || (rs->persistentMode && rs->chunkFd == RSTREAM_DIR_IS_EMPTY));
 
 	/* проверяем нет ли информации о уже прочитанных из чанка данных */
 	if(rs->chunkFd >= 0) {
@@ -330,7 +311,7 @@ static int RStream__openNextChunk(struct RStream *rs) {
 			ssize_t bufLen;
 			unsigned long offset;
 
-			debug("Found offset-file '%s'", rs->chunkOffsetPath)
+			debug("Found offset-file '%s'", rs->chunkOffsetPath);
 
 			if((bufLen = read(offsetFileFd, buf, sizeof(buf) - 1)) == -1) {
 				warning("Error reading offset-file '%s': %s", rs->chunkOffsetPath, strerror(errno));
@@ -403,40 +384,6 @@ static char RStream__rootHasChunks(struct RStream *rs) {
 	closedir(d);
 
 	return 0;
-}
-
-static void RStream__findFirstChunk(struct RStream *rs) {
-	DIR *d;
-	struct dirent *e;
-	unsigned long min = ULONG_MAX;
-
-	debug("Scanning '%s' for first chunk", rs->rootDir);
-
-	d = opendir(rs->rootDir);
-	if(!d)
-		error("opendir(%s)", rs->rootDir);
-
-	while((e = readdir(d))) {
-		if(e->d_name[0] == '.' || strstr(e->d_name, ".chunk") != e->d_name + (strlen(e->d_name) - 6))
-			continue;
-
-		unsigned long cur = strtoul(e->d_name, NULL, 10);
-
-		debug(" %10lu: %s", cur, e->d_name);
-
-		if(cur == ULONG_MAX || !cur) {
-			warning("unable to parse chunk filename: %s", e->d_name);
-			continue;
-		}
-
-		if(cur < min)
-			min =cur;
-	}
-
-	if(min && min != ULONG_MAX)
-		rs->chunkNumber = min - 1;
-
-	closedir(d);
 }
 
 static void RStream__scheduleUpdateNotification(struct RStream *rs) {

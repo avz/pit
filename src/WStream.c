@@ -16,26 +16,30 @@
 
 static void WStream__createNextChunk(struct WStream *ws);
 static void WStream__acquireWriterLock(struct WStream *ws);
-static void WStream__findLastChunk(struct WStream *ws);
 static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, char writeInOneChunk);
+static void WStream__findLastTimemicro(struct WStream *ws);
 
-void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed) {
-	int resumeMode = 0;
-
+void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed, char multiWriterEnabled) {
 	ws->rootDir = rootDir;
 
+	ws->multiWriterMode = multiWriterEnabled;
 	ws->chunkFd = -1;
 	ws->writerLockFd = -1;
 	ws->needNewChunk = 0;
-	ws->chunkNumber = 0;
+	ws->timestampChunkNumber = 0;
 	ws->chunkMaxSize = chunkSize;
 	ws->lineBuffer = NULL;
 	ws->lineBufferSize = 0;
 	ws->lineBufferMaxSize = 0;
+	ws->resumeMode = 0;
+	ws->lastChunkTimemicro = 0;
+
+	ws->pid = (unsigned long)getpid();
+	ws->random = ((unsigned long)random()) & 0xffffffffl;
 
 	if(mkdir(rootDir, 0755) == -1) {
-		if(errno == EEXIST && resumeIsAllowed) {
-			resumeMode = 1;
+		if(errno == EEXIST && (resumeIsAllowed || multiWriterEnabled)) {
+			ws->resumeMode = 1;
 		} else {
 			if(errno == EEXIST)
 				error("stream directory '%s' already exists. If you want to continue writing try `-c` option", rootDir);
@@ -45,12 +49,8 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, ch
 	}
 
 	WStream__acquireWriterLock(ws);
-
-	if(resumeMode) {
-		WStream__findLastChunk(ws);
-		debug("Start writing to chunk #%lu", ws->chunkNumber + 1);
-	}
-
+	if(ws->resumeMode)
+		WStream__findLastTimemicro(ws);
 	WStream__createNextChunk(ws);
 }
 
@@ -143,8 +143,6 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
 			WStream__write(ws, buf + toWrite, toBuffer, 1);
 		}
 	}
-
-	debug("w: %lu; b: %lu", (long)toWrite, (long)toBuffer);
 }
 
 /**
@@ -224,6 +222,7 @@ void WStream_needNewChunk(struct WStream *ws) {
 }
 
 static void WStream__acquireWriterLock(struct WStream *ws) {
+	int lockType;
 	char path[PATH_MAX];
 
 	snprintf(path, sizeof(path), "%s/.writer.lock", ws->rootDir);
@@ -231,9 +230,14 @@ static void WStream__acquireWriterLock(struct WStream *ws) {
 	debug("acquiring writer lock: %s", path);
 	ws->writerLockFd = open(path, O_CREAT | O_WRONLY, 0644);
 	if(ws->writerLockFd == -1)
-		error("unable to open/create lock file '%s'", path);
+		error("unable to open/create lock-file '%s'", path);
 
-	if(flock(ws->writerLockFd, LOCK_EX | LOCK_NB) == -1)
+	if(ws->multiWriterMode)
+		lockType = LOCK_SH;
+	else
+		lockType = LOCK_EX;
+
+	if(flock(ws->writerLockFd, lockType | LOCK_NB) == -1)
 		error("unable to acquire writer lock on '%s'. Maybe this stream currenly used", ws->rootDir);
 }
 
@@ -242,19 +246,24 @@ static void WStream__createNextChunk(struct WStream *ws) {
 	char pathBuf[PATH_MAX + 64];
 
 	int fd;
+	uint64_t currentTimemicro = timemicro();
 
-	/*
-	 * при переполнении зайдёт на второй круг и при коллизии имени
-	 * вывалится с ошибкой
-	 */
-	ws->chunkNumber++;
+	if(currentTimemicro == ws->lastChunkTimemicro) {
+		ws->timestampChunkNumber++;
+	} else {
+		ws->timestampChunkNumber = 0;
+		ws->lastChunkTimemicro = currentTimemicro;
+	}
 
 	snprintf(
 		pathBuf,
 		sizeof(pathBuf),
-		"%s/%010lu.chunk",
+		"%s/%016" PRIu64 ".%03lu.%05lu-%08lx.chunk",
 		ws->rootDir,
-		ws->chunkNumber
+		ws->lastChunkTimemicro,
+		ws->timestampChunkNumber,
+		ws->pid & 0xffffl,
+		ws->random
 	);
 
 	snprintf(tmpPathBuf, sizeof(tmpPathBuf), "%s.tmp", pathBuf);
@@ -275,11 +284,11 @@ static void WStream__createNextChunk(struct WStream *ws) {
 	ws->chunkSize = 0;
 }
 
-static void WStream__findLastChunk(struct WStream *ws) {
+static void WStream__findLastTimemicro(struct WStream *ws) {
 	/* копипаста из RStream__findFirstChunk */
 	DIR *d;
 	struct dirent *e;
-	unsigned long max = 0;
+	uint64_t mts;
 
 	debug("Scanning '%s' for last chunk", ws->rootDir);
 
@@ -288,24 +297,19 @@ static void WStream__findLastChunk(struct WStream *ws) {
 		error("opendir(%s)", ws->rootDir);
 
 	while((e = readdir(d))) {
-		if(e->d_name[0] == '.')
+		if(e->d_name[0] == '.' || strstr(e->d_name, ".chunk") != e->d_name + (strlen(e->d_name) - 6))
 			continue;
 
-		unsigned long cur = strtoul(e->d_name, NULL, 10);
-
-		debug(" %10lu: %s", cur, e->d_name);
-
-		if(cur == ULONG_MAX || !cur) {
+		if(!sscanf(e->d_name, "%" PRIu64, &mts)) {
 			warning("unable to parse chunk filename: %s", e->d_name);
 			continue;
 		}
 
-		if(cur > max)
-			max = cur;
+		if(mts > ws->lastChunkTimemicro)
+			ws->lastChunkTimemicro = mts;
 	}
 
-	if(max && max != ULONG_MAX)
-		ws->chunkNumber = max;
+	debug("Last microtimestamp: %" PRIu64, ws->lastChunkTimemicro);
 
 	closedir(d);
 }

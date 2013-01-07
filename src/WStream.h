@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <time.h>
 
 /**
  * длина фиксированная, завязана на реализацию
@@ -10,7 +11,6 @@
  * просто так менять константу нельзя
  *
  */
-#define WSTREAM_IDENT_LENGTH 19
 #define WSTREAM_LINE_MAX_LENGTH (1*1024*1024)
 
 struct WStream {
@@ -21,10 +21,20 @@ struct WStream {
 	ssize_t lineBufferMaxSize;
 	ssize_t lineBufferSize;
 
-	/**
-	 * порядковый номер текущего чанка
+	char multiWriterMode;
+	char resumeMode;
+
+	/*
+	 * эти два свойства используются для уникальной идентификации потока
 	 */
-	unsigned long chunkNumber;
+	unsigned long pid;
+	unsigned long random;
+
+	uint64_t lastChunkTimemicro;
+	/**
+	 * порядковый номер текущего чанка внутри таймстемпа
+	 */
+	unsigned long timestampChunkNumber;
 
 	/* информация по текущему чанку */
 	int chunkFd;
@@ -42,7 +52,7 @@ struct WStream {
 	int needNewChunk;
 };
 
-void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed);
+void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed, char multiWriterEnabled);
 void WStream_destroy(struct WStream *ws);
 void WStream_needNewChunk(struct WStream *ws);
 
