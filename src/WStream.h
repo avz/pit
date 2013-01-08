@@ -30,7 +30,7 @@ struct WStream {
 	 * эти два свойства используются для уникальной идентификации потока
 	 */
 	unsigned long pid;
-	uint32_t random;
+	uint32_t startTime;
 
 	uint64_t lastChunkTimemicro;
 	/**

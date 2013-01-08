@@ -35,7 +35,7 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, ch
 	ws->denySignalChunkCreation = 0;
 
 	ws->pid = (unsigned long)getpid();
-	ws->random = devurandom32();
+	ws->startTime = (uint32_t)time(NULL);
 
 	if(mkdir(rootDir, 0755) == -1) {
 		if(errno == EEXIST && (resumeIsAllowed || multiWriterEnabled)) {
@@ -273,7 +273,7 @@ static void WStream__createNextChunk(struct WStream *ws) {
 		ws->lastChunkTimemicro,
 		ws->timestampChunkNumber,
 		ws->pid & 0xffffl,
-		ws->random
+		ws->startTime
 	);
 
 	snprintf(tmpPathBuf, sizeof(tmpPathBuf), "%s.tmp", pathBuf);
