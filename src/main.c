@@ -8,6 +8,7 @@
 #include "RStream.h"
 
 #include <signal.h>
+#include <errno.h>
 
 unsigned int ALARM_INTERVAL = 1;
 
@@ -15,7 +16,7 @@ struct WStream WSTREAM;
 struct RStream RSTREAM;
 
 static void _alarmSignalHandler(int sig) {
-	WStream_needNewChunk(&WSTREAM);
+	WStream_needNewChunk(&WSTREAM, 0);
 
 	alarm(ALARM_INTERVAL);
 }
@@ -23,6 +24,7 @@ static void _alarmSignalHandler(int sig) {
 static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunkTimeout, char resumeModeIsAllowed, char lineModeEnabled, char multiMode) {
 	char buf[64 * 1024];
 	ssize_t wr;
+	void (*writerFunc)(struct WStream *, const char *, ssize_t);
 
 	debug("Write mode: '%s'. Options:", rootDir);
 
@@ -44,12 +46,26 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 
 	WStream_init(&WSTREAM, rootDir, chunkSize, resumeModeIsAllowed, multiMode);
 
-	if(lineModeEnabled) {
-		while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
-			WStream_writeLines(&WSTREAM, buf, wr);
-	} else {
-		while((wr = read(STDIN_FILENO, buf, sizeof(buf))) > 0)
-			WStream_write(&WSTREAM, buf, wr);
+	if(lineModeEnabled)
+		writerFunc = WStream_writeLines;
+	else
+		writerFunc = WStream_write;
+
+	for(;;) {
+		wr = read(STDIN_FILENO, buf, sizeof(buf));
+
+		if(wr <= 0) {
+			if(wr == 0) {
+				break;
+			} else {
+				if(errno == EINTR)
+					continue;
+
+				error("error reading stdin");
+			}
+		}
+
+		writerFunc(&WSTREAM, buf, wr);
 	}
 
 	WStream_flush(&WSTREAM);

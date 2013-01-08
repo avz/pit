@@ -7,6 +7,7 @@
 void error(const char *fmt, ...);
 void warning(const char *fmt, ...);
 void _buf_debug(const char *fmt, ...);
+uint32_t devurandom32();
 uint64_t timemicro();
 
 #ifdef DEBUG

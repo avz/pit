@@ -51,3 +51,25 @@ uint64_t timemicro() {
 
 	return (uint64_t)tv.tv_sec * 1000000 + (uint64_t)tv.tv_usec;
 }
+
+uint32_t devurandom32() {
+	uint32_t rnd;
+
+	FILE *f = fopen("/dev/urandom", "r");
+
+	if(f) {
+		if(fread(&rnd, sizeof(rnd), 1, f) == 1) {
+			fclose(f);
+			return rnd;
+		}
+
+		fclose(f);
+
+		warning("unable to read /dev/urandom: %s", strerror(errno));
+	} else {
+		warning("unable to open /dev/urandom: %s", strerror(errno));
+	}
+
+	error("/dev/urandom error");
+	return 0xffffffff;
+}

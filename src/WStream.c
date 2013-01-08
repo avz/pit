@@ -25,7 +25,6 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, ch
 	ws->multiWriterMode = multiWriterEnabled;
 	ws->chunkFd = -1;
 	ws->writerLockFd = -1;
-	ws->needNewChunk = 0;
 	ws->timestampChunkNumber = 0;
 	ws->chunkMaxSize = chunkSize;
 	ws->lineBuffer = NULL;
@@ -33,9 +32,10 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, ch
 	ws->lineBufferMaxSize = 0;
 	ws->resumeMode = 0;
 	ws->lastChunkTimemicro = 0;
+	ws->denySignalChunkCreation = 0;
 
 	ws->pid = (unsigned long)getpid();
-	ws->random = ((unsigned long)random()) & 0xffffffffl;
+	ws->random = devurandom32();
 
 	if(mkdir(rootDir, 0755) == -1) {
 		if(errno == EEXIST && (resumeIsAllowed || multiWriterEnabled)) {
@@ -74,7 +74,11 @@ void WStream_destroy(struct WStream *ws) {
 }
 
 void WStream_write(struct WStream *ws, const char *buf, ssize_t len) {
+	ws->denySignalChunkCreation = 1;
+
 	WStream__write(ws, buf, len, 0);
+
+	ws->denySignalChunkCreation = 0;
 }
 
 void WStream_flush(struct WStream *ws) {
@@ -98,6 +102,8 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
 	char *lastLineEnd;
 	ssize_t toWrite;
 	ssize_t toBuffer;
+
+	ws->denySignalChunkCreation = 1;
 
 	if(!ws->lineBuffer) {
 		ws->lineBuffer = malloc(WSTREAM_LINE_MAX_LENGTH);
@@ -143,6 +149,8 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
 			WStream__write(ws, buf + toWrite, toBuffer, 1);
 		}
 	}
+
+	ws->denySignalChunkCreation = 0;
 }
 
 /**
@@ -153,22 +161,9 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
  */
 static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, char disableSplit) {
 	ssize_t written = 0;
-	int fd;
 
-	if(!disableSplit && (ws->needNewChunk || ws->chunkSize >= ws->chunkMaxSize)) {
-		fd = ws->chunkFd;
-		ws->chunkFd = -1;
-
-		WStream__createNextChunk(ws);
-
-		ws->needNewChunk = 0;
-
-		/* сначала создаём новый чанк, а потом уже закрываем старый,
-		 * иначе ридер может подумать что запись закончена и убить стрим
-		*/
-		if(fd >= 0)
-			close(fd);
-	}
+	if(!disableSplit && ws->chunkSize >= ws->chunkMaxSize)
+		WStream_needNewChunk(ws, 1);
 
 	/* хак, позволяющий сделать проверку на новый чанк, не записывая ничего */
 	if(!buf)
@@ -216,9 +211,24 @@ static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, cha
 	} while(written < len);
 }
 
-void WStream_needNewChunk(struct WStream *ws) {
+void WStream_needNewChunk(struct WStream *ws, char forceCreation) {
 	debug("new chunk requested");
-	ws->needNewChunk = 1;
+	int fd;
+
+	if(!ws->denySignalChunkCreation || forceCreation) {
+		fd = ws->chunkFd;
+		ws->chunkFd = -1;
+
+		WStream__createNextChunk(ws);
+
+		/* сначала создаём новый чанк, а потом уже закрываем старый,
+		 * иначе ридер может подумать что запись закончена и убить стрим
+		*/
+		if(fd >= 0)
+			close(fd);
+
+		debug("new chunk created");
+	}
 }
 
 static void WStream__acquireWriterLock(struct WStream *ws) {
@@ -258,7 +268,7 @@ static void WStream__createNextChunk(struct WStream *ws) {
 	snprintf(
 		pathBuf,
 		sizeof(pathBuf),
-		"%s/%016" PRIu64 ".%03lu.%05lu-%08lx.chunk",
+		"%s/%016" PRIu64 ".%03lu.%05lu-%08" PRIx32 ".chunk",
 		ws->rootDir,
 		ws->lastChunkTimemicro,
 		ws->timestampChunkNumber,

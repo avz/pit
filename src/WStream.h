@@ -21,6 +21,8 @@ struct WStream {
 	ssize_t lineBufferMaxSize;
 	ssize_t lineBufferSize;
 
+	char denySignalChunkCreation;
+
 	char multiWriterMode;
 	char resumeMode;
 
@@ -28,7 +30,7 @@ struct WStream {
 	 * эти два свойства используются для уникальной идентификации потока
 	 */
 	unsigned long pid;
-	unsigned long random;
+	uint32_t random;
 
 	uint64_t lastChunkTimemicro;
 	/**
@@ -48,13 +50,11 @@ struct WStream {
 	 * максимальный размер
 	 */
 	ssize_t chunkMaxSize;
-
-	int needNewChunk;
 };
 
 void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed, char multiWriterEnabled);
 void WStream_destroy(struct WStream *ws);
-void WStream_needNewChunk(struct WStream *ws);
+void WStream_needNewChunk(struct WStream *ws, char forceCreation);
 
 void WStream_write(struct WStream *ws, const char *buf, ssize_t len);
 void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len);
