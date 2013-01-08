@@ -229,19 +229,15 @@ static int RStream__openNotAcquiredChunk(struct RStream *rs) {
 		}
 
 		/*
-		 * просто локаем пурвый байт, потому что больше локать нечем
-		 * т.к. flock() уже используется для синхронизации читателя и писателя
+		 * просто локаем первый байт, потому что flock() изпользовать
+		 * нельзя чтобы не смешивать типы локов
 		 */
-		if(lockf(fd, F_TLOCK, 1) == -1) {
-			if(errno == EACCES || errno == EAGAIN) {
-				debug("    - locked");
+		if(!flockRangeNB(fd, 0, 1, F_WRLCK)) {
+			debug("    - locked");
 
-				close(fd);
-				fd = -1;
-				continue;
-			}
-
-			error("locking chunk '%s'", rs->chunkPath);
+			close(fd);
+			fd = -1;
+			continue;
 		}
 
 		/* проверяем не удалили ли файл до лока */
@@ -346,17 +342,11 @@ static int RStream__openNextChunk(struct RStream *rs) {
  */
 static int RStream__chunkIsCompleted(struct RStream *rs) {
 	while(1) {
-		if(flock(rs->chunkFd, LOCK_EX | LOCK_NB) == -1) {
-			if(errno == EINTR)
-				continue;
-
-			if(errno == EWOULDBLOCK) {
-				/* файл залочен, значит писатель всё ещё работает над ним */
-//				fprintf(stderr, "locked\n");
-				return 0;
-			}
-
+		if(!flockRangeNB(rs->chunkFd, 1, 1, F_WRLCK)) {
+			/* файл залочен, значит писатель ещё пишет */
+			return 0;
 		}
+
 		break;
 	}
 

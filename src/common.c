@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 void _buf_debug(const char *fmt, ...) {
 	va_list argp;
@@ -50,4 +52,22 @@ uint64_t timemicro() {
 	gettimeofday(&tv, NULL);
 
 	return (uint64_t)tv.tv_sec * 1000000 + (uint64_t)tv.tv_usec;
+}
+
+char flockRangeNB(int fd, off_t start, off_t len, short int type) {
+	struct flock l;
+
+	l.l_start = start;
+	l.l_len = len;
+	l.l_type = type;
+	l.l_whence = SEEK_SET;
+
+	if(fcntl(fd, F_SETLK, &l) == -1) {
+		if(errno == EAGAIN || errno == EACCES)
+			return 0;
+
+		error("unable to lock range");
+	}
+
+	return 1;
 }

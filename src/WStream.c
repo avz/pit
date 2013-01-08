@@ -284,8 +284,8 @@ static void WStream__createNextChunk(struct WStream *ws) {
 	if(fd < 0)
 		error("open('%s')", tmpPathBuf);
 
-	if(flock(fd, LOCK_EX) == -1)
-		error("flock('%s', LOCK_EX)", tmpPathBuf);
+	if(!flockRangeNB(fd, 1, 1, F_WRLCK))
+		error("file '%s' already locked", tmpPathBuf);
 
 	if(rename(tmpPathBuf, pathBuf) == -1)
 		error("rename('%s', '%s')", tmpPathBuf, pathBuf);
