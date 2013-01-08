@@ -19,7 +19,7 @@ for size in 1 2 3 7 13 17 18 19 25 30 35 36 37 10000; do
 	fi
 
 	needChunks=$(($payloadSize / $size + 1))
-	numChunks=$(ls "$root" | wc -l)
+	numChunks=$(ls "$root" | wc -l | awk '{print $1}')
 
 	if [ "$numChunks" != "$needChunks" ]; then
 		echo "chunks count mismatch (must be $needChunks, but $numChunks found)"

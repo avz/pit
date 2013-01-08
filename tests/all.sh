@@ -5,6 +5,12 @@ cd "$testDir"
 
 fail=""
 
+if which md5; then
+	export MD5=$(which md5)
+else
+	export MD5=$(which md5sum)
+fi
+
 echo "Running tests"
 
 for test in *.test.sh; do

@@ -10,11 +10,11 @@ payloadSize=1000
 payload=$(dd if=/dev/urandom bs=$payloadSize count=1)
 chunkSize=$((payloadSize / 10))
 
-payloadChecksum=$(echo -n "$payload" | md5sum)
+payloadChecksum=$(echo -n "$payload" | $MD5)
 
 echo -n "$payload" | cstream -t $payloadSize | ./buf -s $chunkSize -w "$root" &
 
-readedPayloadChecksum=$(./buf -Wr "$root" | md5sum)
+readedPayloadChecksum=$(./buf -Wr "$root" | $MD5)
 retCode=$?
 
 if [ "$retCode" != "0" ]; then

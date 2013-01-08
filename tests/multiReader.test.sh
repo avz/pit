@@ -22,8 +22,8 @@ if [ ! -s /tmp/1.payload  -o ! -s /tmp/2.payload ]; then
 	exit 1
 fi
 
-poChecksum=$(cat $payloadPath | md5sum)
-prChecksum=$(sort /tmp/1.payload /tmp/2.payload | md5sum)
+poChecksum=$(cat $payloadPath | $MD5)
+prChecksum=$(sort /tmp/1.payload /tmp/2.payload | $MD5)
 
 if [ "$poChecksum" != "$prChecksum" ]; then
 	echo "Payload mismatch: '$poChecksum' != '$prChecksum'"

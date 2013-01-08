@@ -25,8 +25,8 @@ rm -rf "$root"
 
 wait $j1
 
-poChecksum=$(cat $payloadPath | md5sum)
-prChecksum=$(cat /tmp/1.payload | md5sum)
+poChecksum=$(cat $payloadPath | $MD5)
+prChecksum=$(cat /tmp/1.payload | $MD5)
 
 if [ "$poChecksum" != "$prChecksum" ]; then
 	echo "Payload mismatch: '$poChecksum' != '$prChecksum'"
