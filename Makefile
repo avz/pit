@@ -1,7 +1,7 @@
 CC?=cc
 LD=$(CC)
 
-PROJECT=buf
+PROJECT=pit
 
 OBJS=main.o common.o WStream.o RStream.o
 VPATH=src
