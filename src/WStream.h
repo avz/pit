@@ -23,9 +23,6 @@ struct WStream {
 
 	char denySignalChunkCreation;
 
-	char multiWriterMode;
-	char resumeMode;
-
 	/*
 	 * эти два свойства используются для уникальной идентификации потока
 	 */
@@ -52,7 +49,7 @@ struct WStream {
 	ssize_t chunkMaxSize;
 };
 
-void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed, char multiWriterEnabled);
+void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize);
 void WStream_destroy(struct WStream *ws);
 void WStream_needNewChunk(struct WStream *ws, char forceCreation);
 

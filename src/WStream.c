@@ -19,10 +19,9 @@ static void WStream__acquireWriterLock(struct WStream *ws);
 static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, char writeInOneChunk);
 static void WStream__findLastTimemicro(struct WStream *ws);
 
-void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, char resumeIsAllowed, char multiWriterEnabled) {
+void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize) {
 	ws->rootDir = rootDir;
 
-	ws->multiWriterMode = multiWriterEnabled;
 	ws->chunkFd = -1;
 	ws->writerLockFd = -1;
 	ws->timestampChunkNumber = 0;
@@ -30,7 +29,6 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, ch
 	ws->lineBuffer = NULL;
 	ws->lineBufferSize = 0;
 	ws->lineBufferMaxSize = 0;
-	ws->resumeMode = 0;
 	ws->lastChunkTimemicro = 0;
 	ws->denySignalChunkCreation = 0;
 
@@ -38,19 +36,12 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize, ch
 	ws->startTime = (uint32_t)time(NULL);
 
 	if(mkdir(rootDir, 0755) == -1) {
-		if(errno == EEXIST && (resumeIsAllowed || multiWriterEnabled)) {
-			ws->resumeMode = 1;
-		} else {
-			if(errno == EEXIST)
-				error("stream directory '%s' already exists. If you want to continue writing try `-c` option", rootDir);
-			else
-				error("mkdir('%s')", rootDir);
-		}
+		if(errno != EEXIST)
+			error("mkdir('%s')", rootDir);
 	}
 
 	WStream__acquireWriterLock(ws);
-	if(ws->resumeMode)
-		WStream__findLastTimemicro(ws);
+	WStream__findLastTimemicro(ws);
 	WStream__createNextChunk(ws);
 }
 
@@ -232,7 +223,6 @@ void WStream_needNewChunk(struct WStream *ws, char forceCreation) {
 }
 
 static void WStream__acquireWriterLock(struct WStream *ws) {
-	int lockType;
 	char path[PATH_MAX];
 
 	snprintf(path, sizeof(path), "%s/.writer.lock", ws->rootDir);
@@ -242,12 +232,7 @@ static void WStream__acquireWriterLock(struct WStream *ws) {
 	if(ws->writerLockFd == -1)
 		error("unable to open/create lock-file '%s'", path);
 
-	if(ws->multiWriterMode)
-		lockType = LOCK_SH;
-	else
-		lockType = LOCK_EX;
-
-	if(flock(ws->writerLockFd, lockType | LOCK_NB) == -1)
+	if(flock(ws->writerLockFd, LOCK_SH | LOCK_NB) == -1)
 		error("unable to acquire writer lock on '%s'. Maybe this stream currenly used", ws->rootDir);
 }
 

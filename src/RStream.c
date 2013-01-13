@@ -22,13 +22,11 @@ static void RStream__removeRootDir(struct RStream *ws);
 static int RStream__openNotAcquiredChunk(struct RStream *rs);
 static char RStream__rootHasChunks(struct RStream *rs);
 
-void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeEnabled, char persistentMode, char waitRootMode) {
-	int flockOps;
+void RStream_init(struct RStream *rs, const char *rootDir, char persistentMode, char waitRootMode) {
 	rs->chunkNumber = 0;
 	rs->chunkFd = -1;
 	rs->rootDirFd = -1;
 	rs->rootDir = rootDir;
-	rs->multiReaderMode = multiReaderModeEnabled;
 	rs->persistentMode = persistentMode;
 
 	do {
@@ -55,17 +53,8 @@ void RStream_init(struct RStream *rs, const char *rootDir, char multiReaderModeE
 		}
 	} while(waitRootMode);
 
-	if(multiReaderModeEnabled)
-		flockOps = LOCK_SH;
-	else
-		flockOps = LOCK_EX;
-
-	if(flock(rs->rootDirFd, flockOps | LOCK_NB) == -1) {
-		if(errno == EWOULDBLOCK)
-			error("Stream '%s' already has a reader. If you want use multireader mode - add `-m` option", rootDir);
-		else
-			error(rootDir);
-	}
+	if(flock(rs->rootDirFd, LOCK_SH | LOCK_NB) == -1)
+		error("Unable to lock %s\n", rootDir);
 
 	debug("Start reading from chunk #%lu", rs->chunkNumber + 1);
 }
@@ -164,12 +153,12 @@ static void RStream__removeRootDir(struct RStream *rs) {
 
 	snprintf(path, sizeof(path), "%s/.writer.lock", rs->rootDir);
 	if(unlink(path) == -1) {
-		if(errno != ENOENT || !rs->multiReaderMode)
+		if(errno != ENOENT)
 			warning("unable to unlink() write lock-file '%s'", path);
 	}
 
 	if(rmdir(rs->rootDir) == -1) {
-		if(errno != ENOENT || !rs->multiReaderMode)
+		if(errno != ENOENT)
 			error("rmdir('%s')", rs->rootDir);
 	}
 }

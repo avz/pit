@@ -21,13 +21,12 @@ static void _alarmSignalHandler(int sig) {
 	alarm(ALARM_INTERVAL);
 }
 
-static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunkTimeout, char resumeModeIsAllowed, char lineModeEnabled, char multiMode) {
+static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunkTimeout, char binaryMode) {
 	char buf[64 * 1024];
 	ssize_t wr;
 	void (*writerFunc)(struct WStream *, const char *, ssize_t);
 
 	debug("Write mode: '%s'. Options:", rootDir);
-
 
 	if(chunkTimeout) {
 		debug("\tchunk timeout: %u", chunkTimeout);
@@ -39,17 +38,15 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 		debug("\tchunk timeout: disabled");
 	}
 
-	debug("\tresume mode: %s", resumeModeIsAllowed ? "enabled" : "disabled");
-	debug("\tline mode: %s", lineModeEnabled ? "enabled" : "disabled");
+	debug("\tbinary mode: %s", binaryMode ? "enabled" : "disabled");
 	debug("\tchunk size: %llu", (unsigned long long)chunkSize);
-	debug("\tmulti-process mode: %s", multiMode ? "enabled" : "disabled");
 
-	WStream_init(&WSTREAM, rootDir, chunkSize, resumeModeIsAllowed, multiMode);
+	WStream_init(&WSTREAM, rootDir, chunkSize);
 
-	if(lineModeEnabled)
-		writerFunc = WStream_writeLines;
-	else
+	if(binaryMode)
 		writerFunc = WStream_write;
+	else
+		writerFunc = WStream_writeLines;
 
 	for(;;) {
 		wr = read(STDIN_FILENO, buf, sizeof(buf));
@@ -81,7 +78,7 @@ static void _rstreamDestroySignalHandler(int sig) {
 	exit(sig + 128);
 }
 
-static void readMode(const char *rootDir, char multiReaderModeEnabled, char persistentMode, char waitRootMode) {
+static void readMode(const char *rootDir, char persistentMode, char waitRootMode) {
 	char buf[64 * 1024];
 	ssize_t rd;
 
@@ -97,7 +94,7 @@ static void readMode(const char *rootDir, char multiReaderModeEnabled, char pers
 	signal(SIGTERM, _rstreamDestroySignalHandler);
 	signal(SIGPIPE, _rstreamDestroySignalHandler);
 
-	RStream_init(&RSTREAM, rootDir, multiReaderModeEnabled, persistentMode, waitRootMode);
+	RStream_init(&RSTREAM, rootDir, persistentMode, waitRootMode);
 
 	while((rd = RStream_read(&RSTREAM, buf, sizeof(buf))) > 0) {
 		if(write(STDOUT_FILENO, buf, (size_t)rd) == -1)
@@ -107,8 +104,8 @@ static void readMode(const char *rootDir, char multiReaderModeEnabled, char pers
 
 static void printUsage(const char *cmd) {
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "\t%s [-mpW] -r /path/to/storage/dir\n", cmd);
-	fprintf(stderr, "\t%s -w [ -s chunkSize ][ -t chunkTimeout ][-mcl] /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "\t%s -r [-pW] /path/to/storage/dir\n", cmd);
+	fprintf(stderr, "\t%s -w [ -s chunkSize ][ -t chunkTimeout ][-b] /path/to/storage/dir\n", cmd);
 	fprintf(stderr, "Additional info available at https://github.com/avz/buf/\n");
 }
 
@@ -120,9 +117,7 @@ static void usage(const char *cmd) {
 int main(int argc, char *argv[]) {
 	char writeModeEnabled = 0;
 	char readModeEnabled = 0;
-	char resumeIsAllowed = 0;
-	char lineMode = 0;
-	char multiProcessMode = 0;
+	char binaryMode = 0;
 	char persistentMode = 0;
 	char waitRootMode = 0;
 
@@ -133,7 +128,7 @@ int main(int argc, char *argv[]) {
 
 	int opt;
 
-	while((opt = getopt(argc, argv, "hmlwWprs:t:c")) != -1) {
+	while((opt = getopt(argc, argv, "hbwWprs:t:")) != -1) {
 		switch(opt) {
 			case 'w':
 				writeModeEnabled = 1;
@@ -148,20 +143,15 @@ int main(int argc, char *argv[]) {
 			break;
 			case 't':
 				chunkTimeout = strtoul(optarg, NULL, 10);
-				if(chunkTimeout == ULONG_MAX || chunkTimeout == 0 || chunkTimeout >= UINT_MAX)
+				if(chunkTimeout == ULONG_MAX || chunkTimeout >= UINT_MAX)
 					error("invalid value: %s", optarg);
 			break;
-			case 'c':
-				resumeIsAllowed = 1;
-			break;
-			case 'l':
-				lineMode = 1;
-			break;
-			case 'm':
-				multiProcessMode = 1;
+			case 'b':
+				binaryMode = 1;
 			break;
 			case 'p':
 				persistentMode = 1;
+				waitRootMode = 1;
 			break;
 			case 'W':
 				waitRootMode = 1;
@@ -188,10 +178,7 @@ int main(int argc, char *argv[]) {
 	if(readModeEnabled && chunkTimeout != ULONG_MAX)
 		usage(argv[0]);
 
-	if(!writeModeEnabled && resumeIsAllowed)
-		usage(argv[0]);
-
-	if(!writeModeEnabled && lineMode)
+	if(!writeModeEnabled && binaryMode)
 		usage(argv[0]);
 
 	if(!readModeEnabled && persistentMode)
@@ -206,14 +193,14 @@ int main(int argc, char *argv[]) {
 		chunkSize = 1 * 1024 * 1024;
 
 	if(chunkTimeout == ULONG_MAX)
-		chunkTimeout = 0;
+		chunkTimeout = 1;
 
 	rootDir = argv[optind];
 
 	if(writeModeEnabled)
-		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout, resumeIsAllowed, lineMode, multiProcessMode);
+		writeMode(rootDir, (ssize_t)chunkSize, (unsigned int)chunkTimeout, binaryMode);
 	else if(readModeEnabled)
-		readMode(rootDir, multiProcessMode, persistentMode, waitRootMode);
+		readMode(rootDir, persistentMode, waitRootMode);
 
 	return EXIT_SUCCESS;
 }
