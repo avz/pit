@@ -1,5 +1,4 @@
 # ``pit`` - Pipe multiplexing Tool [![Build Status](https://secure.travis-ci.org/avz/pit.png)](http://travis-ci.org/avz/pit)
-## Overview
 
 Утилита позволяет создать поток данных с неограниченным количеством писателей и читателей.
 Это может быть использовано, например, для реалтайм генерации и обработки данных в несколько потоков.
