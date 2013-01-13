@@ -9,21 +9,24 @@ rm -rf "$root"
 payloadPath="/tmp/payload"
 dd if=/dev/urandom bs=$((1024*1024)) count=10 | sort > $payloadPath
 
-./buf -Wpmr "$root" | sort > /tmp/1.payload &
+$CMD -Wpr "$root" | sort > /tmp/1.payload &
+
 j1=$!
 
-if ! dd if="$payloadPath" bs=$((1024*1024)) count=5 | ./buf -ls 10000 -w "$root"; then
-	exit $?
+if ! dd if="$payloadPath" bs=$((1024*1024)) count=5 | $CMD -s 10000 -w "$root"; then
+	exit 255
 fi
 
-if ! dd if="$payloadPath" ibs=$((1024*1024)) skip=5 | ./buf -cls 10000 -w "$root"; then
-	exit $?
+if ! dd if="$payloadPath" ibs=$((1024*1024)) skip=5 | $CMD -s 10000 -w "$root"; then
+	exit 255
 fi
 
 sleep 1
 rm -rf "$root"
 
-wait $j1
+if ! wait $j1; then
+	exit $?
+fi
 
 poChecksum=$(cat $payloadPath | $MD5)
 prChecksum=$(cat /tmp/1.payload | $MD5)

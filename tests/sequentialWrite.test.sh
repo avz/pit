@@ -12,10 +12,10 @@ payload="${payload1}${payload2}" # 36 bytes
 
 chunkSize=10
 
-echo -n "$payload1" | ./buf -s $chunkSize -w "$root"
-echo -n "$payload2" | ./buf -c -s $chunkSize -w "$root"
+echo -n "$payload1" | $CMD -s $chunkSize -w "$root"
+echo -n "$payload2" | $CMD -s $chunkSize -w "$root"
 
-readedPayload=$(./buf -r "$root")
+readedPayload=$($CMD -r "$root")
 retCode=$?
 
 if [ "$retCode" != "0" ]; then

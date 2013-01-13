@@ -12,9 +12,9 @@ chunkSize=$((payloadSize / 10))
 
 payloadChecksum=$(echo -n "$payload" | $MD5)
 
-echo -n "$payload" | cstream -t $payloadSize | ./buf -s $chunkSize -w "$root" &
+echo -n "$payload" | cstream -t $payloadSize | $CMD -s $chunkSize -w "$root" &
 
-readedPayloadChecksum=$(./buf -Wr "$root" | $MD5)
+readedPayloadChecksum=$($CMD -Wr "$root" | $MD5)
 retCode=$?
 
 if [ "$retCode" != "0" ]; then

@@ -9,12 +9,12 @@ rm -rf "$root"
 payloadPath="/tmp/payload"
 dd if=/dev/urandom bs=$((1024*1024)) count=10 | sort > $payloadPath
 
-if ! ./buf -ls 10000 -w "$root" < $payloadPath; then
+if ! $CMD -ls 10000 -w "$root" < $payloadPath; then
 	exit $?
 fi
 
-./buf -mr "$root" | cstream -t 5000000 > /tmp/1.payload &
-./buf -mr "$root" | cstream -t 5000000 > /tmp/2.payload
+$CMD -mr "$root" | cstream -t 5000000 > /tmp/1.payload &
+$CMD -mr "$root" | cstream -t 5000000 > /tmp/2.payload
 
 if [ ! -s /tmp/1.payload  -o ! -s /tmp/2.payload ]; then
 	echo " one or all threads read nothing"

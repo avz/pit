@@ -11,6 +11,8 @@ else
 	export MD5=$(which md5sum)
 fi
 
+export CMD="./pit"
+
 echo "Running tests"
 
 for test in *.test.sh; do

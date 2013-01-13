@@ -6,7 +6,7 @@ root=/tmp/___bufTest
 
 rm -rf "$root"
 
-if echo '' | ./buf -r "$root"; then
+if echo '' | $CMD -r "$root"; then
 	exit 1
 else
 	exit 0
