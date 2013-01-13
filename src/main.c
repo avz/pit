@@ -16,7 +16,10 @@ struct WStream WSTREAM;
 struct RStream RSTREAM;
 
 static void _alarmSignalHandler(int sig) {
-	WStream_needNewChunk(&WSTREAM, 0);
+	uint64_t now = timemicro();
+
+	if(now - WSTREAM.lastCreatedChunkTimemicro >= (uint64_t)ALARM_INTERVAL * 1000000)
+		WStream_scheduleCloseChunk(&WSTREAM);
 
 	alarm(ALARM_INTERVAL);
 }
@@ -68,8 +71,7 @@ static void writeMode(const char *rootDir, ssize_t chunkSize, unsigned int chunk
 	WStream_flush(&WSTREAM);
 }
 
-static void _emptySignalHandler(int sig) {
-
+static void _ioSignalHandler(int sig) {
 }
 
 static void _rstreamDestroySignalHandler(int sig) {
@@ -83,11 +85,10 @@ static void readMode(const char *rootDir, char persistentMode, char waitRootMode
 	ssize_t rd;
 
 	debug("Read mode: '%s'. Options:", rootDir);
-	debug("\tmilti-reader mode: %s", multiReaderModeEnabled ? "enabled" : "disabled");
 	debug("\tpersistent mode: %s", persistentMode ? "enabled" : "disabled");
 	debug("\twait root mode: %s", waitRootMode ? "enabled" : "disabled");
 
-	signal(SIGIO, _emptySignalHandler);
+	signal(SIGIO, _ioSignalHandler);
 
 	signal(SIGHUP, _rstreamDestroySignalHandler);
 	signal(SIGINT, _rstreamDestroySignalHandler);

@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "RStream.h"
+#include "WStream.h"
 
 #define RSTREAM_DIR_IS_EMPTY -1
 #define RSTREAM_NO_MORE_NOT_ACQUIRED_FILES -2
@@ -17,10 +18,11 @@
 
 static int RStream__chunkIsCompleted(struct RStream *ws);
 static int RStream__openNextChunk(struct RStream *ws);
-static void RStream__scheduleUpdateNotification(struct RStream *ws);
+static void RStream__scheduleUpdateNotification(struct RStream *ws, useconds_t sleepUsec);
 static void RStream__removeRootDir(struct RStream *ws);
 static int RStream__openNotAcquiredChunk(struct RStream *rs);
 static char RStream__rootHasChunks(struct RStream *rs);
+static char RStream__writersIsHere(struct RStream *rs);
 
 void RStream_init(struct RStream *rs, const char *rootDir, char persistentMode, char waitRootMode) {
 	rs->chunkNumber = 0;
@@ -42,8 +44,7 @@ void RStream_init(struct RStream *rs, const char *rootDir, char persistentMode, 
 		} else if(waitRootMode)  {
 			/* тут нужно дополнительно проверить появился ли хоть один чанк */
 			if(!RStream__rootHasChunks(rs)) {
-				RStream__scheduleUpdateNotification(rs);
-				usleep(1000000);
+				RStream__scheduleUpdateNotification(rs, 1000000);
 				continue;
 			}
 
@@ -132,8 +133,7 @@ ssize_t RStream_read(struct RStream *rs, char *buf, ssize_t size) {
 					continue;
 				}
 
-				RStream__scheduleUpdateNotification(rs);
-				usleep(100000);
+				RStream__scheduleUpdateNotification(rs, 100000);
 				continue;
 
 			} else if(r == -1) {
@@ -262,10 +262,30 @@ static int RStream__openNotAcquiredChunk(struct RStream *rs) {
 	return fd;
 }
 
+static char RStream__writersIsHere(struct RStream *rs) {
+	char path[PATH_MAX + 64];
+	int fd;
+
+	snprintf(path, sizeof(path), "%s/.writer.lock", rs->rootDir);
+	fd = open(path, O_RDONLY);
+	if(fd == -1)
+		return 0;
+
+	if(flock(fd, LOCK_EX | LOCK_NB) == -1) {
+		close(fd);
+		return errno == EWOULDBLOCK;
+	}
+
+	close(fd);
+
+	return 0;
+}
+
 static int RStream__openNextChunk(struct RStream *rs) {
 	if(rs->chunkFd >= 0) {
-		if(unlink(rs->chunkPath) == -1)
+		if(unlink(rs->chunkPath) == -1) {
 			error("unlink('%s')", rs->chunkPath);
+		}
 
 		if(unlink(rs->chunkOffsetPath) == -1) {
 			if(errno != ENOENT)
@@ -276,13 +296,23 @@ static int RStream__openNextChunk(struct RStream *rs) {
 		rs->chunkFd = -1;
 	}
 
-	do {
+	for(;;) {
 		rs->chunkFd = RStream__openNotAcquiredChunk(rs);
 		if(rs->chunkFd >= 0)
 			break;
 
-		usleep(100000);
-	} while(rs->chunkFd == RSTREAM_NO_MORE_NOT_ACQUIRED_FILES || (rs->persistentMode && rs->chunkFd == RSTREAM_DIR_IS_EMPTY));
+		if(rs->chunkFd == RSTREAM_ROOT_DELETED)
+			break;
+
+		if(rs->chunkFd == RSTREAM_DIR_IS_EMPTY) {
+			if(!rs->persistentMode && !RStream__writersIsHere(rs)) {
+				/* писателей не осталось */
+				break;
+			}
+		}
+
+		RStream__scheduleUpdateNotification(rs, 100000);
+	}
 
 	/* проверяем нет ли информации о уже прочитанных из чанка данных */
 	if(rs->chunkFd >= 0) {
@@ -365,9 +395,11 @@ static char RStream__rootHasChunks(struct RStream *rs) {
 	return 0;
 }
 
-static void RStream__scheduleUpdateNotification(struct RStream *rs) {
+static void RStream__scheduleUpdateNotification(struct RStream *rs, useconds_t sleepUsec) {
 #ifdef F_NOTIFY
-	if(fcntl(rs->rootDirFd, F_NOTIFY, DN_MODIFY) == -1)
-		error("fcntl('%s', F_NOTIFY, DN_MODIFY)", rs->rootDir);
+	if(fcntl(rs->rootDirFd, F_NOTIFY, DN_MODIFY | DN_CREATE) == -1)
+		error("fcntl('%s', F_NOTIFY, DN_MODIFY | DN_CREATE)", rs->rootDir);
 #endif
+
+	usleep(sleepUsec);
 }

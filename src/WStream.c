@@ -14,10 +14,13 @@
 #include <limits.h>
 #include <dirent.h>
 
-static void WStream__createNextChunk(struct WStream *ws);
+static void WStream__createChunk(struct WStream *ws);
 static void WStream__acquireWriterLock(struct WStream *ws);
 static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, char writeInOneChunk);
 static void WStream__findLastTimemicro(struct WStream *ws);
+static void WStream__mayCloseChunk(struct WStream *ws);
+static void WStream__needChunk(struct WStream *ws);
+static void WStream__closeChunk(struct WStream *ws);
 
 void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize) {
 	ws->rootDir = rootDir;
@@ -30,7 +33,9 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize) {
 	ws->lineBufferSize = 0;
 	ws->lineBufferMaxSize = 0;
 	ws->lastChunkTimemicro = 0;
-	ws->denySignalChunkCreation = 0;
+	ws->denyChunkClose = 0;
+	ws->chunkCloseScheduled = 0;
+	ws->lastCreatedChunkTimemicro = 0;
 
 	ws->pid = (unsigned long)getpid();
 	ws->startTime = (uint32_t)time(NULL);
@@ -42,7 +47,7 @@ void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize) {
 
 	WStream__acquireWriterLock(ws);
 	WStream__findLastTimemicro(ws);
-	WStream__createNextChunk(ws);
+	/*WStream__createNextChunk(ws);*/
 }
 
 void WStream_destroy(struct WStream *ws) {
@@ -65,15 +70,16 @@ void WStream_destroy(struct WStream *ws) {
 }
 
 void WStream_write(struct WStream *ws, const char *buf, ssize_t len) {
-	ws->denySignalChunkCreation = 1;
+	ws->denyChunkClose = 1;
 
 	WStream__write(ws, buf, len, 0);
 
-	ws->denySignalChunkCreation = 0;
+	ws->denyChunkClose = 0;
 }
 
 void WStream_flush(struct WStream *ws) {
-	if(ws->lineBuffer && ws->lineBufferSize && ws->chunkFd >= 0) {
+	if(ws->lineBuffer && ws->lineBufferSize) {
+		debug("flush line tail");
 		WStream__write(ws, ws->lineBuffer, ws->lineBufferSize, 1);
 		ws->lineBufferSize = 0;
 	}
@@ -94,7 +100,7 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
 	ssize_t toWrite;
 	ssize_t toBuffer;
 
-	ws->denySignalChunkCreation = 1;
+	ws->denyChunkClose = 1;
 
 	if(!ws->lineBuffer) {
 		ws->lineBuffer = malloc(WSTREAM_LINE_MAX_LENGTH);
@@ -113,9 +119,6 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
 		}
 
 		WStream__write(ws, buf, toWrite, 1);
-
-		/* вызываем создание нового чанка, если он нужен */
-		WStream__write(ws, NULL, 0, 0);
 	}
 
 	if(toBuffer) {
@@ -141,7 +144,9 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
 		}
 	}
 
-	ws->denySignalChunkCreation = 0;
+	ws->denyChunkClose = 0;
+
+	WStream__mayCloseChunk(ws);
 }
 
 /**
@@ -153,8 +158,12 @@ void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len) {
 static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, char disableSplit) {
 	ssize_t written = 0;
 
-	if(!disableSplit && ws->chunkSize >= ws->chunkMaxSize)
-		WStream_needNewChunk(ws, 1);
+	WStream__needChunk(ws);
+
+	if(!disableSplit && ws->chunkSize >= ws->chunkMaxSize) {
+		WStream__closeChunk(ws);
+		WStream__createChunk(ws);
+	}
 
 	/* хак, позволяющий сделать проверку на новый чанк, не записывая ничего */
 	if(!buf)
@@ -177,7 +186,7 @@ static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, cha
 
 				debug("chunk size overflow (%llu bytes)", (unsigned long long)ws->chunkMaxSize);
 
-				WStream__createNextChunk(ws);
+				WStream__createChunk(ws);
 				fdMustBeClosed = 1;
 			} else {
 				ws->chunkSize += toWriteInThisChunk;
@@ -202,24 +211,29 @@ static void WStream__write(struct WStream *ws, const char *buf, ssize_t len, cha
 	} while(written < len);
 }
 
-void WStream_needNewChunk(struct WStream *ws, char forceCreation) {
-	debug("new chunk requested");
-	int fd;
+void WStream_scheduleCloseChunk(struct WStream *ws) {
+	ws->chunkCloseScheduled = 1;
+	WStream__mayCloseChunk(ws);
+}
 
-	if(!ws->denySignalChunkCreation || forceCreation) {
-		fd = ws->chunkFd;
+static void WStream__needChunk(struct WStream *ws) {
+	if(ws->chunkFd == -1)
+		WStream__createChunk(ws);
+}
+
+static void WStream__mayCloseChunk(struct WStream *ws) {
+	if(ws->chunkCloseScheduled)
+		WStream__closeChunk(ws);
+}
+
+static void WStream__closeChunk(struct WStream *ws) {
+	if(ws->chunkFd != -1) {
+		debug("chunk closed");
+		close(ws->chunkFd);
 		ws->chunkFd = -1;
-
-		WStream__createNextChunk(ws);
-
-		/* сначала создаём новый чанк, а потом уже закрываем старый,
-		 * иначе ридер может подумать что запись закончена и убить стрим
-		*/
-		if(fd >= 0)
-			close(fd);
-
-		debug("new chunk created");
 	}
+
+	ws->chunkCloseScheduled = 0;
 }
 
 static void WStream__acquireWriterLock(struct WStream *ws) {
@@ -236,7 +250,7 @@ static void WStream__acquireWriterLock(struct WStream *ws) {
 		error("unable to acquire writer lock on '%s'. Maybe this stream currenly used", ws->rootDir);
 }
 
-static void WStream__createNextChunk(struct WStream *ws) {
+static void WStream__createChunk(struct WStream *ws) {
 	char tmpPathBuf[PATH_MAX + 64];
 	char pathBuf[PATH_MAX + 64];
 
@@ -277,6 +291,9 @@ static void WStream__createNextChunk(struct WStream *ws) {
 
 	ws->chunkFd = fd;
 	ws->chunkSize = 0;
+
+	ws->chunkCloseScheduled = 0;
+	ws->lastCreatedChunkTimemicro = timemicro();
 }
 
 static void WStream__findLastTimemicro(struct WStream *ws) {

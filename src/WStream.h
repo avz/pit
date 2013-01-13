@@ -21,7 +21,8 @@ struct WStream {
 	ssize_t lineBufferMaxSize;
 	ssize_t lineBufferSize;
 
-	char denySignalChunkCreation;
+	char denyChunkClose;
+	char chunkCloseScheduled;
 
 	/*
 	 * эти два свойства используются для уникальной идентификации потока
@@ -29,6 +30,7 @@ struct WStream {
 	unsigned long pid;
 	uint32_t startTime;
 
+	uint64_t lastCreatedChunkTimemicro;
 	uint64_t lastChunkTimemicro;
 	/**
 	 * порядковый номер текущего чанка внутри таймстемпа
@@ -51,7 +53,8 @@ struct WStream {
 
 void WStream_init(struct WStream *ws, const char *rootDir, ssize_t chunkSize);
 void WStream_destroy(struct WStream *ws);
-void WStream_needNewChunk(struct WStream *ws, char forceCreation);
+
+void WStream_scheduleCloseChunk(struct WStream *ws);
 
 void WStream_write(struct WStream *ws, const char *buf, ssize_t len);
 void WStream_writeLines(struct WStream *ws, const char *buf, ssize_t len);
